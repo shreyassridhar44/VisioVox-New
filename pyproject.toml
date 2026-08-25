@@ -21,6 +21,11 @@ ml = [
   "onnxruntime-gpu>=1.20",
   "opencv-python-headless>=4.10",
   "huggingface-hub>=0.26",
+  # LibriMix generation (scripts/generate_librimix.sh)
+  "pandas>=2.2",
+  "pyloudnorm>=0.1",
+  "pysndfx>=0.3.6",
+  "tqdm>=4.66",
 ]
 
 [tool.uv.sources]
