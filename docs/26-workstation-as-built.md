@@ -137,12 +137,15 @@ One thing surfaced that is worth acting on before Phase 1:
 
 Everything else in the project is 16 kHz — `docs/06-datasets.md` §2 pins Libri2Mix to 16k. A Tier 0
 baseline measured at 8 kHz would understate SI-SDR and, more importantly, would not be comparable
-with the Tier 1 numbers it exists to be compared against. Pick a 16 kHz checkpoint
-(`speechbrain/sepformer-whamr16k`) when the Phase 1 baseline is built, and assert the model's
-sample rate rather than trusting the input to be respected.
+with the Tier 1 numbers it exists to be compared against.
 
-This is the smoke test doing its job: the failure it caught was silent, and it would have shown up
-later as an unexplained gap between the Tier 0 and Tier 1 numbers.
+**Fixed.** The smoke test now uses `speechbrain/sepformer-whamr16k` and asserts that the output
+sample count matches the input to within 1%. A silent downsample halves it, so the check fails hard
+instead of relying on anyone reading a log line. Output is now 74,800 samples at 16 kHz for a
+74,800-sample input.
+
+This is the smoke test doing its job: the failure it caught was silent, and it would otherwise have
+shown up later as an unexplained gap between the Tier 0 and Tier 1 numbers.
 
 ---
 

@@ -115,19 +115,33 @@ def check_speaker_embedding() -> str:
 
 
 def check_separation() -> str:
-    """S5 Tier-0 baseline: off-the-shelf blind separation (docs/25 §4)."""
+    """S5 Tier-0 baseline: off-the-shelf blind separation (docs/25 §4).
+
+    Uses the 16 kHz checkpoint deliberately. `sepformer-wsj02mix` is 8 kHz and
+    resamples 16 kHz input down without warning -- it only says so in a log
+    line -- which would make the Tier 0 baseline quietly incomparable with the
+    Tier 1 numbers it exists to be measured against.
+    """
     from speechbrain.inference.separation import SepformerSeparation
 
     model = SepformerSeparation.from_hparams(
-        source="speechbrain/sepformer-wsj02mix",
-        savedir=str(REPO_ROOT / "models" / "sepformer"),
+        source="speechbrain/sepformer-whamr16k",
+        savedir=str(REPO_ROOT / "models" / "sepformer16k"),
         run_opts={"device": "cuda"},
     )
+    n_in = len(load_fixture()[0])
     est = model.separate_file(path=str(FIXTURE))
     n_src = est.shape[-1]
     if n_src != 2:
         raise RuntimeError(f"expected 2 estimated sources, got {n_src}")
-    return f"{n_src} sources, {est.shape[1]} samples each"
+    # A silent downsample halves the sample count; catch it as a hard failure
+    # rather than trusting the model to honour the input rate.
+    n_out = int(est.shape[1])
+    if abs(n_out - n_in) > 0.01 * n_in:
+        raise RuntimeError(
+            f"sample-rate mismatch: {n_in} in, {n_out} out — checkpoint is not 16 kHz"
+        )
+    return f"{n_src} sources, {n_out} samples @ {SAMPLE_RATE} Hz (rate preserved)"
 
 
 def check_whisper() -> str:
