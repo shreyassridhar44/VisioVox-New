@@ -1,0 +1,6 @@
+{
+  "name": "@visiovox/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenAPI spec and artifact manifest JSON Schema — source of truth for service boundaries"
+}

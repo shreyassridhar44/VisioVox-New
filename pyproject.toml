@@ -1,0 +1,102 @@
+[project]
+name = "visiovox"
+version = "0.1.0"
+description = "Audio-visual target speaker extraction — workspace root"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "services/worker-cpu",
+  "services/worker-gpu",
+  "packages/py-client",
+  "ml",
+]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=6.0",
+  "types-pyyaml",
+]
+
+# ----------------------------------------------------------------------------
+# ruff — format + lint (CLAUDE.md: Python conventions)
+# ----------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps/api/src", "services/worker-cpu/src", "services/worker-gpu/src",
+       "packages/py-client/src", "ml"]
+# Markdown is excluded deliberately: `ruff format` reformats fenced Python blocks,
+# and the docs contain illustrative pseudo-code that must stay as written.
+extend-exclude = ["ml/notebooks", ".venv", "*.md"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",      # pycodestyle
+  "F",           # pyflakes
+  "I",           # isort
+  "N",           # pep8-naming
+  "UP",          # pyupgrade
+  "B",           # bugbear
+  "A",           # builtins shadowing
+  "C4",          # comprehensions
+  "SIM",         # simplify
+  "PTH",         # pathlib
+  "RUF",         # ruff-specific
+  "ASYNC",       # async correctness
+  "S",           # bandit — security
+  "T20",         # no print in library code
+]
+ignore = [
+  "E501",        # line length handled by the formatter
+  "S101",        # assert — used deliberately in tests and invariant checks
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "T20"]
+"**/tests/**" = ["S", "T20"]
+"scripts/**" = ["T20"]
+"ml/**" = ["T20"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ----------------------------------------------------------------------------
+# mypy — strict (CLAUDE.md: "mypy --strict", "type hints everywhere")
+# ----------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+disallow_any_generics = true
+no_implicit_reexport = true
+show_error_codes = true
+pretty = true
+exclude = ['ml/notebooks/', '\.venv/']
+
+# Third-party ML libraries ship no stubs; do not let that weaken our own code.
+[[tool.mypy.overrides]]
+module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
+          "faster_whisper.*", "soundfile.*", "librosa.*", "df.*"]
+ignore_missing_imports = true
+
+# ----------------------------------------------------------------------------
+# pytest
+# ----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests", "apps", "services", "packages", "ml"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers --strict-config"
+markers = [
+  "gpu: requires a CUDA device",
+  "slow: takes more than a few seconds",
+  "integration: requires the Compose stack",
+]

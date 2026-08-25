@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+uv.lock
+.venv/
+node_modules/
+dist/
+.next/
+packages/ts-client/src/generated/
+
+# Prose is hand-formatted and reviewed; Prettier reflows tables and breaks
+# intentional line structure. Code formatting only.
+*.md
+docs/
