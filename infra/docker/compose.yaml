@@ -1,0 +1,89 @@
+# Local development stack. Brought up by `make dev`.
+#
+# This is infrastructure only — Postgres, Redis, MinIO and a mail catcher.
+# The application runs on the host against these, with PIPELINE_MODE=mock so
+# no GPU is involved (docs/17-infrastructure-deployment.md §2).
+name: visiovox
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: visiovox
+      POSTGRES_PASSWORD: visiovox
+      POSTGRES_DB: visiovox
+      # Deterministic collation so index ordering matches CI and production.
+      POSTGRES_INITDB_ARGS: '--locale=C --encoding=UTF8'
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U visiovox -d visiovox']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Celery broker and result backend; persistence is not needed locally.
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: create the media bucket so the API does not have to bootstrap it.
+  minio-init:
+    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin
+        mc mb --ignore-existing local/visiovox-media
+        mc anonymous set none local/visiovox-media
+        echo "bucket ready"
+    restart: 'no'
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # web UI
+    healthcheck:
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '1025']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  minio-data:
