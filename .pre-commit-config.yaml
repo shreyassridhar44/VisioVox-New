@@ -1,0 +1,65 @@
+# Run: uv run pre-commit install --install-hooks && uv run pre-commit install -t commit-msg
+# Markdown is excluded from whitespace fixers: trailing double-space is a
+# significant line break, and the docs are hand-formatted.
+default_install_hook_types: [pre-commit, commit-msg]
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        entry: uv run mypy .
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier
+        entry: pnpm exec prettier --check
+        language: system
+        files: '\.(ts|tsx|js|jsx|mjs|cjs|json|ya?ml|css)$'
+        exclude: '^(pnpm-lock\.yaml|uv\.lock)$'
+
+      - id: eslint
+        name: eslint
+        entry: pnpm exec eslint
+        language: system
+        files: '\.(ts|tsx|js|jsx|mjs|cjs)$'
+
+      # Commits in this repository have a single author. This hook is the
+      # mechanical backstop for that policy.
+      - id: no-ai-attribution
+        name: reject AI attribution trailers
+        entry: scripts/check-commit-msg.sh
+        language: script
+        stages: [commit-msg]
