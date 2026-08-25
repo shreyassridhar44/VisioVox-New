@@ -23,6 +23,10 @@ smoke test all run. No application or pipeline code yet — that is Phase 1/2.
 the distro (not Docker Desktop). Full record and reasoning in
 [`docs/26-workstation-as-built.md`](./docs/26-workstation-as-built.md).
 
+**Phase 1 started:** artifact manifest v1.0 is frozen
+(`packages/contracts/schemas/manifest.schema.json`) with 13 contract tests. This is the gate that
+lets the application track proceed against a stable interface while the model is still being built.
+
 **Phase 0 exit evidence:** `make check` green (ruff, mypy strict, eslint, tsc, pytest); `make dev`
 brings up Postgres, Redis, MinIO and mail with every service answering; `make smoke` reports
 6 ok / 1 skipped / 0 failed. GPU baseline: A5000 sm_86, bf16 native, 48.4 TFLOP/s bf16 matmul.
@@ -32,14 +36,16 @@ brings up Postgres, Redis, MinIO and mail with every service answering; `make sm
 1. ⭐ **HuggingFace token** — the one manual blocker left. Accept gated terms for
    `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`, put the token in
    `.env.local`, then `make smoke` should report 7 ok / 0 skipped.
-2. **LibriSpeech + WHAM! download** — running unattended in tmux (`tmux attach -t librimix`,
-   log at `~/logs/librimix-fetch.log`, resumable via `wget -c`). Generation into Libri2Mix is the
-   next step and must use one config only: `--freqs 16k --modes min --types mix_both`.
-3. **Phase 1** — baseline pipeline, pretrained only. Use a **16 kHz** separation checkpoint; see
-   the SepFormer note in the Lessons below.
-4. **Reclaim `C:`** — `wsl --unregister Ubuntu` removes the superseded distro (~13.5 GB). The
-   relocated `VisioVox` distro is what everything now uses; a backup sits at
-   `F:\wsl-backup\ext4.vhdx.bak`.
+2. **Dataset pipeline** — running unattended in tmux. `librimix` fetches; `dataset` waits for it
+   and then generates Libri2Mix (16k / min / mix_both only). Logs in `~/logs/`. Both resumable.
+   Generation aborts if the host volume has under 260 GB free.
+3. **Phase 1** — baseline pipeline, pretrained only. The manifest schema is already frozen, so the
+   app track (Phase 2) is unblocked and can start in parallel now.
+4. **Reclaim `C:`** — `wsl --unregister Ubuntu` removes the superseded distro (~13.5 GB); `C:` is
+   down to ~2 GB. The live distro is `VisioVox` at `D:\wsl\VisioVox`; a backup of the original
+   sits at `F:\wsl-backup\ext4.vhdx.bak`.
+5. **Push access** — commits are authored `sharanmalali` but that account has no write permission
+   on `shreyassridhar44/VisioVox-New` (403). Resolve before the next push.
 
 ### Decisions taken outside the docs
 
