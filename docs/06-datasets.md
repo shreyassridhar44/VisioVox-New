@@ -227,18 +227,34 @@ restores. Everything else is re-downloadable.
 
 ## 8. Ethics and consent
 
-For VVX specifically:
+Two separate things, with very different costs:
 
-- Written informed consent from every participant before recording
-- Consent explicitly covers: research use, model training, retention period, whether clips may
-  appear in publications or public demos (separate checkbox)
-- Right to withdraw → recordings deleted and the model retrained without them at the next cycle
-- No sensitive personal content recorded; participants briefed on topic scope beforehand
+### Written participant consent — always, no exceptions
+
+- Written informed consent from every participant **before** recording
+- Covers: research use, model training, retention period, and — as a **separate** checkbox — whether
+  clips may appear in publications or public demos
+- Right to withdraw → recordings deleted, model retrained without them at the next cycle
+- No sensitive personal content; participants briefed on topic scope beforehand
 - Raw recordings encrypted at rest; access limited to the project
-- If the project is institutional, **obtain ethics board approval before recording** — this is
-  human-subjects research involving biometric data
+- Consent records stored separately from the recordings
 
-Consent form template: `docs/templates/vvx-consent-form.md`.
+Template: [`templates/vvx-consent-form.md`](./templates/vvx-consent-form.md). Requires no approval to
+use. This is the part that protects participants and makes the data usable in a report.
+
+### Institutional ethics review — check whether it applies
+
+Whether formal IRB/ethics-board review is required depends on your institution and on whether you
+intend to publish. Many institutions exempt student coursework that records consenting adults on
+non-sensitive topics, or handle it with a short exemption form.
+
+**Ask your supervisor before assuming a six-week process.** If review is required, it gates only the
+VVX recording (Phase 3) — not the baseline pipeline, the application, or training on public data.
+See [`21-implementation-plan.md`](./21-implementation-plan.md) §Week 0.
+
+**If VVX cannot happen:** AMI's headset channels are the documented fallback (R-25) — real
+conversational overlap with per-speaker references, weaker than purpose-recorded data but publishable.
+Note the substitution explicitly in the report.
 
 ---
 

@@ -28,23 +28,45 @@ without a GPU or a trained model. The tracks converge at Phase 8.
 
 ---
 
-## Week 0 — Long-lead items ⭐
+## Week 0 — Long-lead items
 
-These have external dependencies measured in weeks. **Start them before Phase 0**, because nothing
-else unblocks them and two of them gate later phases.
+Only two of these are worth doing before Phase 0. The rest can start later without cost.
 
-| Item | Lead time | Gates | Action |
+| Item | Lead time | Blocks | When |
 |---|---|---|---|
-| **Ethics / IRB approval for VVX recording** | 2–6 weeks | Phase 3, and therefore Phase 4 | Submit the application. Template consent form in [`templates/vvx-consent-form.md`](./templates/vvx-consent-form.md) |
-| **HuggingFace account + accept pyannote licences** | 5 minutes | Phase 0 smoke test | Accept gated model terms for `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`, generate a read token |
-| **LibriMix download** | 2–5 days unattended | Phase 3 | Start on the workstation immediately — it is slow and needs no supervision |
-| **LRS3 research agreement** | 2–8 weeks, may be denied | Nothing — optional | Apply if pursuing the research checkpoint ([ADR-0013](./adr/0013-dataset-licensing.md)) |
-| **Recruit VVX participants** | 1–3 weeks | Phase 3 | ≥ 12 people, gender-balanced, including same-gender pairs |
-| **Workstation pre-flight** | 1 hour | Everything | [`25-compute-and-hardware.md`](./25-compute-and-hardware.md) §1b |
+| **HuggingFace token + accept pyannote licences** | 5 minutes | Phase 0 smoke test | ⭐ **Now** |
+| **Start LibriMix download** | 2–5 days unattended | Phase 3 | ⭐ **Now** — slow, needs no supervision |
+| Workstation pre-flight | 1 hour | Everything | Now — [`25-compute-and-hardware.md`](./25-compute-and-hardware.md) §1b |
+| Recruit VVX participants | 1–3 weeks | Phase 3 | By week 2 |
+| Ethics clearance (if required) | 0–6 weeks | Phase 3 only | See below |
+| LRS3 research agreement | 2–8 weeks, may be denied | Nothing — optional | Anytime, or never |
 
-Ethics approval is the critical one. It has the longest lead time, it cannot be shortened by working
-harder, and Phase 3 cannot start without it. Submitting it in week 0 rather than week 4 is the
-single cheapest schedule insurance available.
+### On ethics clearance — deferrable, and possibly not required
+
+**It blocks nothing until Phase 3 (week 4).** Phases 0, 1 and 2 use only public datasets that carry
+their own licences and ethics provenance. The baseline pipeline, the application, and Tier 1
+training on LibriMix plus simulation all proceed without it.
+
+Two things are being conflated and shouldn't be:
+
+| | What it is | Required? | Cost |
+|---|---|---|---|
+| **Institutional ethics / IRB approval** | A formal review process | **Often not, for coursework** — many institutions exempt student projects recording consenting adults on non-sensitive topics | 0–6 weeks |
+| **Written participant consent** | A form each person signs | **Always. No exceptions.** | 10 minutes |
+
+**Do this instead of a six-week detour:** spend ten minutes asking your project supervisor whether
+your institution requires review for a capstone that records consenting classmates on non-sensitive
+topics. The answer is frequently "no" or "file an exemption form." If it does require full review,
+submit it then and keep building — you have four weeks of runway.
+
+**Use the consent form regardless.** [`templates/vvx-consent-form.md`](./templates/vvx-consent-form.md)
+needs no approval to use, costs nothing, and is what actually protects the participants and makes
+the data usable in a report. This is the part that is genuinely non-negotiable.
+
+**If VVX never happens at all:** the fallback is already designed. AMI's close-talking headset
+channels provide per-speaker references for real overlapping conversational speech — weaker than
+purpose-recorded data, but real and publishable. Documented as R-25 in
+[`22-risk-register.md`](./22-risk-register.md).
 
 ---
 

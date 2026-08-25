@@ -5,6 +5,40 @@ rediscovered. Append as decisions are made and lessons are learned.
 
 ---
 
+## Current status
+
+**Phase:** Documentation complete. **Phase 0 not started.** No application or ML code exists yet.
+
+| | |
+|---|---|
+| Repo | `github.com/shreyassridhar44/VisioVox-New` |
+| Branch | `main` |
+| Contains | 26 design docs, 15 ADRs, 4 templates, repo tooling. No source code. |
+| ML machine | College workstation — RTX A5000 24 GB, 128 GB RAM |
+| App machine | Laptop, 16 GB RAM, no usable GPU (or the workstation, if access is unrestricted) |
+
+### Immediate next actions
+
+1. **Workstation pre-flight** — [`docs/25-compute-and-hardware.md`](./docs/25-compute-and-hardware.md) §1b.
+   Especially: is `~` network-mounted, is the GPU idle, is HuggingFace reachable.
+2. **HuggingFace token** — accept gated terms for `pyannote/speaker-diarization-3.1` and
+   `pyannote/segmentation-3.0`; put the token in `.env.local`.
+3. **Start the LibriMix download** — slow, unattended, blocks Phase 3.
+4. **Phase 0** — monorepo scaffold, tooling, Compose stack, and the pretrained-model smoke test
+   ([`docs/21-implementation-plan.md`](./docs/21-implementation-plan.md)).
+
+### Decisions taken outside the docs
+
+- **Ethics clearance is deferred.** It gates only Phase 3 (VVX recording), not Phases 0–2. Check with
+  the supervisor whether it is required at all before treating it as a six-week process. Written
+  participant consent is still mandatory whenever recording happens.
+- **Commit granularity:** one commit per completed unit of work; push at phase boundaries. Roughly
+  5–15 commits per phase. Not per file, not per phase.
+- **Attribution:** commits are authored solely by the repository owner. No AI co-author trailers or
+  generation footers anywhere. Policy in [`CLAUDE.md`](./CLAUDE.md).
+
+---
+
 ## Origin
 
 The project began as `speaker-isolation-captioning-roadmap.md` (preserved at
