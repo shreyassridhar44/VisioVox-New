@@ -11,6 +11,7 @@ Complete documentation set. Start with the reading paths below rather than readi
 | Understand the goal | [`00-charter.md`](./00-charter.md) |
 | **Know what changed from the original plan and why** | ⭐ [`02-approach-review.md`](./02-approach-review.md) |
 | **Know what needs training and on which machine** | ⭐ [`25-compute-and-hardware.md`](./25-compute-and-hardware.md) |
+| **Set up or reproduce the workstation** | [`26-workstation-as-built.md`](./26-workstation-as-built.md) |
 | Understand the model | [`03`](./03-research-landscape.md) → [`04`](./04-novelty.md) → [`05`](./05-ml-architecture.md) |
 | Understand the system | [`09-system-design.md`](./09-system-design.md) |
 | Start building | [`21-implementation-plan.md`](./21-implementation-plan.md) |
@@ -94,6 +95,7 @@ Complete documentation set. Start with the reading paths below rather than readi
 | 23 | [Runbook](./23-runbook.md) | Dev setup, operations, alert runbooks, DR |
 | 24 | [Glossary](./24-glossary.md) | Terms, metrics, models, abbreviations |
 | 25 | [Compute & Hardware](./25-compute-and-hardware.md) | ⭐ Which machine does what · **what actually needs training** · A5000 tuning |
+| 26 | [Workstation as built](./26-workstation-as-built.md) | Pre-flight results, WSL2 setup, verified GPU baseline, what the smoke test found |
 
 ---
 

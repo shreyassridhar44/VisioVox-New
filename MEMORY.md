@@ -7,25 +7,39 @@ rediscovered. Append as decisions are made and lessons are learned.
 
 ## Current status
 
-**Phase:** Documentation complete. **Phase 0 not started.** No application or ML code exists yet.
+**Phase:** **Phase 0 complete.** Scaffold, tooling, Compose stack and the pretrained-model
+smoke test all run. No application or pipeline code yet — that is Phase 1/2.
 
 | | |
 |---|---|
 | Repo | `github.com/shreyassridhar44/VisioVox-New` |
 | Branch | `main` |
-| Contains | 26 design docs, 15 ADRs, 4 templates, repo tooling. No source code. |
+| Contains | 27 design docs, 15 ADRs, monorepo scaffold, CI, Compose stack, smoke test |
 | ML machine | College workstation — RTX A5000 24 GB, 128 GB RAM |
 | App machine | Laptop, 16 GB RAM, no usable GPU (or the workstation, if access is unrestricted) |
 
+**Workstation environment:** Windows 11 + WSL2 Ubuntu 24.04, distro named `VisioVox`, rootfs on
+`E:\wsl\Ubuntu\ext4.vhdx`. Repo at `~/visiovox/VisioVox-New` on ext4. Docker Engine runs inside
+the distro (not Docker Desktop). Full record and reasoning in
+[`docs/26-workstation-as-built.md`](./docs/26-workstation-as-built.md).
+
+**Phase 0 exit evidence:** `make check` green (ruff, mypy strict, eslint, tsc, pytest); `make dev`
+brings up Postgres, Redis, MinIO and mail with every service answering; `make smoke` reports
+6 ok / 1 skipped / 0 failed. GPU baseline: A5000 sm_86, bf16 native, 48.4 TFLOP/s bf16 matmul.
+
 ### Immediate next actions
 
-1. **Workstation pre-flight** — [`docs/25-compute-and-hardware.md`](./docs/25-compute-and-hardware.md) §1b.
-   Especially: is `~` network-mounted, is the GPU idle, is HuggingFace reachable.
-2. **HuggingFace token** — accept gated terms for `pyannote/speaker-diarization-3.1` and
-   `pyannote/segmentation-3.0`; put the token in `.env.local`.
-3. **Start the LibriMix download** — slow, unattended, blocks Phase 3.
-4. **Phase 0** — monorepo scaffold, tooling, Compose stack, and the pretrained-model smoke test
-   ([`docs/21-implementation-plan.md`](./docs/21-implementation-plan.md)).
+1. ⭐ **HuggingFace token** — the one manual blocker left. Accept gated terms for
+   `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`, put the token in
+   `.env.local`, then `make smoke` should report 7 ok / 0 skipped.
+2. **LibriSpeech + WHAM! download** — running unattended in tmux (`tmux attach -t librimix`,
+   log at `~/logs/librimix-fetch.log`, resumable via `wget -c`). Generation into Libri2Mix is the
+   next step and must use one config only: `--freqs 16k --modes min --types mix_both`.
+3. **Phase 1** — baseline pipeline, pretrained only. Use a **16 kHz** separation checkpoint; see
+   the SepFormer note in the Lessons below.
+4. **Reclaim `C:`** — `wsl --unregister Ubuntu` removes the superseded distro (~13.5 GB). The
+   relocated `VisioVox` distro is what everything now uses; a backup sits at
+   `F:\wsl-backup\ext4.vhdx.bak`.
 
 ### Decisions taken outside the docs
 
@@ -156,6 +170,26 @@ the whole structure, which is why the contract check is a blocking CI gate.
 ## Lessons
 
 _Append as they happen. Include what was expected, what happened, and what changed as a result._
+
+- *(2026-08-26)* **"HuggingFace is blocked" was wrong, and the doc's remedy would have been
+  wrong too.** `docs/25` §1b maps a failed reachability check to "download weights elsewhere, set
+  `HF_HUB_OFFLINE=1`". The actual cause was the host's single DNS resolver timing out on A queries
+  for that one domain while resolving everything else normally; connecting by IP with SNI returned
+  200. Adding secondary resolvers inside WSL took it from 0/10 to 10/10. **Lesson:** distinguish
+  "does not resolve" from "is blocked" with `curl --resolve host:443:<ip>` before accepting an
+  offline workflow — the two have opposite remedies, and the expensive one looks plausible.
+
+- *(2026-08-26)* **`speechbrain/sepformer-wsj02mix` is an 8 kHz model and says so only in a log
+  line.** Fed 16 kHz it silently resamples down and returns two plausible-looking sources. Every
+  other part of this project is 16 kHz. A Tier 0 baseline measured this way would have been
+  quietly incomparable with the Tier 1 numbers it exists to be compared against. Assert a model's
+  sample rate; do not assume the input rate is honoured. Caught by the Phase 0 smoke test, which
+  is exactly the argument for running it before writing pipeline code.
+
+- *(2026-08-26)* **The `~`-is-network-mounted check passed and the machine still failed the storage
+  requirement.** All volumes were local, but `C:` had 1.3 GB free and the drive with the most free
+  space was a USB HDD — which bottlenecks the dataloader for the same reason a network home does,
+  while being invisible to `df`. Check `MediaType`/`BusType`, not just free bytes.
 
 - *(2026-08-25)* The original roadmap's weakest section was the one that sounded most reasonable:
   "don't over-invest in infra, auth, or deployment." Good advice for a different project. The lesson
