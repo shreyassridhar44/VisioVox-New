@@ -1,0 +1,24 @@
+# <type>(<scope>): <subject>            ← imperative mood, ≤72 chars, no trailing period
+#
+# <body — what changed and why. Wrap at 72. Explain the reasoning, not the diff.>
+#
+# <footer — Closes #123 / Refs FR-PLAY-03 / BREAKING CHANGE: …>
+#
+# ------------------------------------------------------------------------------
+# Types:   feat  fix  docs  refactor  perf  test  chore  ml  build  ci
+# Scopes:  api  web  player  worker  ml  infra  docs  contracts  eval  security
+#
+# ml     — model, loss, training or evaluation changes (own review criteria)
+# perf   — performance without behaviour change
+# chore  — tooling, deps, repo maintenance
+#
+# Reference a requirement ID where one applies: [FR-PLAY-03], [NFR-ML-01]
+#
+# GRANULARITY: one commit per completed unit of work — a feature, component,
+# stage or fix. Not per file, not per phase. Push at phase boundaries.
+#
+# ------------------------------------------------------------------------------
+# ATTRIBUTION POLICY
+# Commits are authored solely by the repository owner. Do not add Co-Authored-By
+# trailers, "Generated with" footers, or any AI-tool attribution. See CLAUDE.md.
+# ------------------------------------------------------------------------------
