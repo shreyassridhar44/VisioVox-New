@@ -75,6 +75,9 @@ datasets/
 # Experiment tracking
 wandb/
 mlruns/
+
+# Downloaded pretrained weights — re-fetchable, never committed
+models/
 lightning_logs/
 runs/
 outputs/

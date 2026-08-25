@@ -5,6 +5,33 @@ description = "Audio-visual target speaker extraction — workspace root"
 requires-python = ">=3.12,<3.13"
 dependencies = []
 
+[project.optional-dependencies]
+# ML stack. Installed on the workstation only; CI never resolves this group.
+ml = [
+  "torch",
+  "torchaudio",
+  "numpy",
+  "soundfile",
+  "librosa",
+  "speechbrain>=1.0",
+  "faster-whisper>=1.1",
+  "silero-vad>=5.1",
+  "pyannote-audio>=3.3",
+  "nara-wpe>=0.0.10",
+  "onnxruntime-gpu>=1.20",
+  "opencv-python-headless>=4.10",
+  "huggingface-hub>=0.26",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+torchaudio = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
 [tool.uv.workspace]
 members = [
   "apps/api",
@@ -85,7 +112,8 @@ exclude = ['ml/notebooks/', '\.venv/']
 # Third-party ML libraries ship no stubs; do not let that weaken our own code.
 [[tool.mypy.overrides]]
 module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
-          "faster_whisper.*", "soundfile.*", "librosa.*", "df.*"]
+          "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
+          "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------------
