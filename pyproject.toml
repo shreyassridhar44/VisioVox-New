@@ -53,7 +53,7 @@ dev = [
 ]
 
 # ----------------------------------------------------------------------------
-# ruff — format + lint (CLAUDE.md: Python conventions)
+# ruff — format + lint (see the repository Python conventions)
 # ----------------------------------------------------------------------------
 [tool.ruff]
 target-version = "py312"
@@ -96,7 +96,7 @@ ignore = [
 quote-style = "double"
 
 # ----------------------------------------------------------------------------
-# mypy — strict (CLAUDE.md: "mypy --strict", "type hints everywhere")
+# mypy — strict: type hints everywhere, including tests
 # ----------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.12"
