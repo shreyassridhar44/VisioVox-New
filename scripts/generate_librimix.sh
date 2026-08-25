@@ -31,6 +31,35 @@ for f in dev-clean.tar.gz test-clean.tar.gz train-clean-100.tar.gz \
   require "$f"
 done
 
+# Peak footprint is ~300 GB: LibriSpeech ~30, WHAM ~60, its 16k augmentation
+# ~60, Libri2Mix output ~150. Refuse to start rather than fill the disk
+# halfway through an unattended multi-hour run and leave a partial corpus
+# that looks complete.
+#
+# The binding constraint is the HOST volume, not the ext4 filesystem: a WSL2
+# vhdx is sparse and df inside the distro reports its virtual maximum (~1 TB)
+# regardless of how little room the Windows drive actually has.
+NEED_GB="${NEED_GB:-260}"
+HOST_MOUNT="${HOST_MOUNT:-/mnt/d}"   # volume holding the distro vhdx
+
+avail_gb() { df -BG --output=avail "$1" 2>/dev/null | tail -1 | tr -dc '0-9'; }
+
+ext4_gb=$(avail_gb "$STORAGE")
+free_gb="$ext4_gb"
+if [ -d "$HOST_MOUNT" ]; then
+  host_gb=$(avail_gb "$HOST_MOUNT")
+  if [ -n "$host_gb" ] && [ "$host_gb" -lt "$free_gb" ]; then free_gb="$host_gb"; fi
+  log "space: ext4 reports ${ext4_gb} GB (virtual), host ${HOST_MOUNT} has ${host_gb} GB (real)"
+else
+  log "WARNING: $HOST_MOUNT not mounted — cannot verify real free space, trusting ext4"
+fi
+
+if [ "$free_gb" -lt "$NEED_GB" ]; then
+  log "ABORT: ${free_gb} GB usable, need ~${NEED_GB} GB. Free space or set NEED_GB to override."
+  exit 1
+fi
+log "space check ok: ${free_gb} GB usable"
+
 # ---- extract (idempotent) -------------------------------------------------
 if [ ! -d "$STORAGE/LibriSpeech/train-clean-360" ]; then
   for f in dev-clean test-clean train-clean-100 train-clean-360; do

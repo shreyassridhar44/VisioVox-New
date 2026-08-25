@@ -24,8 +24,8 @@ change operational instructions, not just setup steps.
 | Volume | Device | Media | Role |
 |---|---|---|---|
 | `C:` | Micron 512 GB | NVMe | Windows. **Effectively full** — keep nothing here |
-| `D:` | Samsung 1 TB (disk 1) | NVMe | Free space for datasets |
-| `E:` | Samsung 1 TB (disk 1) | NVMe | **WSL2 root filesystem** (`E:\wsl\Ubuntu\ext4.vhdx`) |
+| `D:` | Samsung 1 TB (disk 1) | NVMe | **WSL2 root filesystem** (`D:\wsl\VisioVox`) — code, Docker and datasets all live inside it |
+| `E:` | Samsung 1 TB (disk 1) | NVMe | Spare NVMe headroom |
 | `F:` | WD My Passport | **HDD over USB** | Cold storage and backups only |
 
 ---
@@ -87,7 +87,7 @@ downloads: intermittent resolution is how a multi-hour fetch dies partway with a
 
 | Decision | Reason |
 |---|---|
-| **WSL2 root filesystem moved to `E:`** | `C:` could not hold it. Copied the vhdx and re-registered with `wsl --import-in-place`; the distro is named `VisioVox` |
+| **WSL2 root filesystem on `D:`** | `C:` could not hold it. Moved to `E:` first, then to `D:` once the dataset footprint was costed: Libri2Mix generation peaks near 300 GB and `E:` had ~204 GB. `wsl --manage VisioVox --move` relocates a distro without unregistering it — 33 s for 14 GB |
 | **Docker Engine inside WSL, not Docker Desktop** | Docker Desktop stores its disk image on `C:`. Engine in the distro puts `/var/lib/docker` inside the vhdx on `E:` and needs no elevation |
 | **Datasets inside the ext4 vhdx, never `/mnt/c`** | 9p is several times slower than ext4 and bottlenecks the dataloader — the constraint already recorded in `MEMORY.md` |
 | **Python 3.12 from the Ubuntu base image** | Ubuntu 24.04 ships 3.12.3, matching the repository convention exactly; no separate install needed |
