@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://visiovox.dev/schemas/manifest/1.0.json",
+  "title": "VisioVox artifact manifest",
+  "description": "Playback payload returned by GET /projects/{id}/manifest (docs/11 §4). Emitted by S9 and by the mock pipeline; both are validated against this schema, which is what keeps the application and ML tracks buildable in parallel.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project_id",
+    "manifest_version",
+    "duration_ms",
+    "has_video",
+    "speakers",
+    "playback_hint",
+    "warnings",
+    "signed_until"
+  ],
+  "properties": {
+    "project_id": { "$ref": "#/$defs/projectId" },
+    "manifest_version": {
+      "description": "Frozen at 1.0 in Phase 1. A breaking change requires a new major version and a migration path, not an in-place edit.",
+      "type": "string",
+      "const": "1.0"
+    },
+    "duration_ms": {
+      "description": "Integer milliseconds. Media timing is never float seconds (invariant 2) — float accumulates error over long timelines.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "has_video": { "type": "boolean" },
+    "difficulty": { "enum": ["easy", "moderate", "hard"] },
+    "overlap_ratio": {
+      "description": "Fraction of the timeline with more than one active speaker. Drives the single-talker passthrough decision (ADR-0010).",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "video": { "$ref": "#/$defs/videoTrack" },
+    "speakers": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/speaker" }
+    },
+    "mixed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audio_url"],
+      "properties": {
+        "audio_url": { "$ref": "#/$defs/url" },
+        "hls": { "$ref": "#/$defs/url" }
+      }
+    },
+    "master_playlist": { "$ref": "#/$defs/url" },
+    "playback_hint": {
+      "description": "Server-chosen playback engine. Policy lives here rather than in the client so duration/track-count/byte thresholds are not duplicated (docs/12 §2).",
+      "enum": ["webaudio", "hls"]
+    },
+    "warnings": {
+      "description": "Machine-readable, snake_case. Partial failure yields partial results (invariant 8), and this is how the UI explains what is missing.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9_]+$" }
+    },
+    "signed_until": {
+      "description": "Expiry of the signed URLs in this document. The client refetches before this to avoid URLs expiring mid-playback.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "description": "has_video implies a video track is present.",
+      "if": { "properties": { "has_video": { "const": true } }, "required": ["has_video"] },
+      "then": { "required": ["video"] }
+    },
+    {
+      "description": "HLS playback requires a master playlist to point at.",
+      "if": {
+        "properties": { "playback_hint": { "const": "hls" } },
+        "required": ["playback_hint"]
+      },
+      "then": { "required": ["master_playlist"] }
+    }
+  ],
+  "$defs": {
+    "projectId": { "type": "string", "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "speakerId": { "type": "string", "pattern": "^spk_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "url": { "type": "string", "format": "uri", "minLength": 1 },
+    "videoTrack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "width", "height"],
+      "properties": {
+        "url": { "$ref": "#/$defs/url" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "audioAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "bytes"],
+      "properties": {
+        "url": { "$ref": "#/$defs/url" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "speaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ordinal",
+        "label",
+        "color_token",
+        "modality",
+        "speaking_ratio",
+        "mean_confidence",
+        "extraction_ok",
+        "audio",
+        "captions"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/speakerId" },
+        "ordinal": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "color_token": { "type": "string", "pattern": "^spk-[1-8]$" },
+        "modality": {
+          "description": "Which streams were actually usable for this speaker. Reliability-gated fusion may fall back to audio_only (Novelty 2).",
+          "enum": ["audiovisual", "audio_only", "visual_only"]
+        },
+        "thumbnail_url": { "$ref": "#/$defs/url" },
+        "speaking_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mean_confidence": {
+          "description": "Inference-time confidence (Novelty 5). Surfaced to the user rather than hidden — honest disclosure of uncertainty is a design principle.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "extraction_ok": {
+          "description": "False means this speaker's track failed but the rest of the job succeeded. 2 of 3 speakers beats nothing (invariant 8).",
+          "type": "boolean"
+        },
+        "audio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["faithful"],
+          "properties": {
+            "faithful": {
+              "description": "The default track, and the one that gets transcribed (invariant 6). Generative restoration can hallucinate words.",
+              "$ref": "#/$defs/audioAsset"
+            },
+            "natural": { "$ref": "#/$defs/audioAsset" },
+            "hls": { "$ref": "#/$defs/url" }
+          }
+        },
+        "peaks_url": { "$ref": "#/$defs/url" },
+        "captions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vtt"],
+          "properties": {
+            "vtt": { "$ref": "#/$defs/url" },
+            "json": { "$ref": "#/$defs/url" }
+          }
+        }
+      }
+    }
+  }
+}

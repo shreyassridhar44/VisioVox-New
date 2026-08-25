@@ -1,0 +1,66 @@
+{
+  "project_id": "prj_01HX8ZQ3M7N4P5R6S7T8V9W0XY",
+  "manifest_version": "1.0",
+  "duration_ms": 612480,
+  "has_video": true,
+  "difficulty": "moderate",
+  "overlap_ratio": 0.17,
+  "video": {
+    "url": "https://cdn.visiovox.dev/prj_01HX/video.mp4?X-Amz-Signature=example",
+    "width": 1920,
+    "height": 1080
+  },
+  "speakers": [
+    {
+      "id": "spk_01HX8ZQ3M7N4P5R6S7T8V9W0X1",
+      "ordinal": 1,
+      "label": "Speaker 1",
+      "color_token": "spk-1",
+      "modality": "audiovisual",
+      "thumbnail_url": "https://cdn.visiovox.dev/prj_01HX/spk_1.webp?X-Amz-Signature=example",
+      "speaking_ratio": 0.41,
+      "mean_confidence": 0.86,
+      "extraction_ok": true,
+      "audio": {
+        "faithful": {
+          "url": "https://cdn.visiovox.dev/prj_01HX/spk_1_f.m4a?X-Amz-Signature=example",
+          "bytes": 4820104
+        },
+        "natural": {
+          "url": "https://cdn.visiovox.dev/prj_01HX/spk_1_n.m4a?X-Amz-Signature=example",
+          "bytes": 4831992
+        }
+      },
+      "peaks_url": "https://cdn.visiovox.dev/prj_01HX/spk_1.peaks.json?X-Amz-Signature=example",
+      "captions": {
+        "vtt": "https://cdn.visiovox.dev/prj_01HX/spk_1.vtt?X-Amz-Signature=example",
+        "json": "https://cdn.visiovox.dev/prj_01HX/spk_1.json?X-Amz-Signature=example"
+      }
+    },
+    {
+      "id": "spk_01HX8ZQ3M7N4P5R6S7T8V9W0X2",
+      "ordinal": 2,
+      "label": "Speaker 2",
+      "color_token": "spk-2",
+      "modality": "audio_only",
+      "speaking_ratio": 0.33,
+      "mean_confidence": 0.71,
+      "extraction_ok": true,
+      "audio": {
+        "faithful": {
+          "url": "https://cdn.visiovox.dev/prj_01HX/spk_2_f.m4a?X-Amz-Signature=example",
+          "bytes": 4102338
+        }
+      },
+      "captions": {
+        "vtt": "https://cdn.visiovox.dev/prj_01HX/spk_2.vtt?X-Amz-Signature=example"
+      }
+    }
+  ],
+  "mixed": {
+    "audio_url": "https://cdn.visiovox.dev/prj_01HX/mixed.m4a?X-Amz-Signature=example"
+  },
+  "playback_hint": "webaudio",
+  "warnings": ["speaker_2_no_face_track"],
+  "signed_until": "2026-08-26T12:45:00Z"
+}
