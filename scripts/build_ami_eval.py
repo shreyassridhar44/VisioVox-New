@@ -40,6 +40,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from eval.ami_meta import Speaker, participants_of
 from pipeline.vad import overlap_ratio, speech_masks
 
 BASE = "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus"
@@ -65,7 +66,10 @@ SPLITS: dict[str, tuple[str, ...]] = {
 
 @dataclass
 class Participant:
-    index: int
+    index: int  # audio channel; pairs with Headset-{index}
+    camera: str  # the Closeup that actually shows this person
+    role: str
+    global_name: str  # stable identity across meetings
     face_video: str
     reference_audio: str
     speaking_ratio: float
@@ -188,6 +192,15 @@ def pick_window(masks: np.ndarray, seconds: int) -> tuple[int, float]:
 
 def build(meeting: str, split: str) -> Session | None:
     print(f"[{meeting}] {split}")
+    people: list[Speaker] = participants_of(meeting)
+    by_channel = {p.channel: p for p in people}
+    if len(by_channel) != N_PARTICIPANTS:
+        # Without the published mapping we would be guessing which face
+        # belongs to which voice, which is the one mistake that silently
+        # corrupts audio-visual training.
+        print("    no camera mapping in AMI metadata; skipping")
+        return None
+    print("    " + ", ".join(f"ch{c}->{by_channel[c].camera}" for c in sorted(by_channel)))
     heads: list[np.ndarray] = []
     for i in range(N_PARTICIPANTS):
         dest = RAW / f"{meeting}.Headset-{i}.wav"
@@ -222,10 +235,13 @@ def build(meeting: str, split: str) -> Session | None:
     for i in range(N_PARTICIPANTS):
         sf.write(d / f"ref_spk{i}.wav", refs[i], RATE)
 
-        # Closeup cameras are 1-indexed; Headset-0 pairs with Closeup1.
-        cam = RAW / f"{meeting}.Closeup{i + 1}.avi"
+        # Which camera shows this participant is published per meeting; it is
+        # NOT Closeup{channel+1}. Eight distinct patterns exist across the
+        # corpus and only 53 of ~171 meetings match that guess.
+        camera = by_channel[i].camera
+        cam = RAW / f"{meeting}.{camera}.avi"
         face_name = ""
-        if fetch(f"{BASE}/{meeting}/video/{meeting}.Closeup{i + 1}.avi", cam):
+        if fetch(f"{BASE}/{meeting}/video/{meeting}.{camera}.avi", cam):
             face_name = f"face_spk{i}.mp4"
             ffmpeg = shutil.which("ffmpeg")
             if ffmpeg is not None:
@@ -256,11 +272,14 @@ def build(meeting: str, split: str) -> Session | None:
                     capture_output=True,
                 )
         else:
-            print(f"    no Closeup{i + 1}; speaker {i} will be audio-only")
+            print(f"    no {camera}; speaker {i} will be audio-only")
 
         participants.append(
             Participant(
                 index=i,
+                camera=camera,
+                role=by_channel[i].role,
+                global_name=by_channel[i].global_name,
                 face_video=face_name,
                 reference_audio=f"ref_spk{i}.wav",
                 speaking_ratio=round(float(window[i].mean()), 4),

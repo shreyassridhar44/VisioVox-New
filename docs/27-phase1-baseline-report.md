@@ -146,19 +146,34 @@ so `S3` cannot bind faces to voices with it. **The `≥ 0.90` face↔voice bindi
 `08-evaluation-protocol.md` §58 is unreachable until Light-ASD replaces it.** That is a Phase 4
 dependency, not a tuning problem.
 
-The second is an open question about the data. The builder assumes `Closeup{N+1}` shows the
-participant wearing `Headset-N`. That assumption is untested — this experiment was meant to confirm
-it and could not, because the instrument was too blunt. It matters: if the correspondence is wrong,
-every ground-truth binding label derived from AMI is wrong, and a visual pathway trained on it would
-learn to associate the wrong face with the wrong voice.
+The second was a data bug, since found and fixed. The builder assumed `Closeup{N+1}` shows the
+participant wearing `Headset-N`. **AMI publishes the real mapping** in
+`corpusResources/meetings.xml`, and it is not consistent:
 
-**Do not train the visual pathway on AMI-derived binding labels until the correspondence is
-verified.** Audio-only work is unaffected, as is everything in §2 and §3 above, none of which uses
-video.
+| channel to camera pattern | meetings |
+|---|---|
+| `Closeup1, Closeup2, Closeup3, Closeup4` — the naive guess | 53 |
+| `Closeup4, Closeup2, Closeup3, Closeup1` | 50 |
+| `Closeup2, Closeup3, Closeup4, Closeup1` | 40 |
+| four further patterns | 28 |
 
-Verification options, cheapest first: check the AMI corpus documentation for a published camera map;
-or re-run this experiment with a real ASD model, where a correct mapping should produce an
-unambiguous diagonal.
+Only 53 of ~171 meetings matched the assumption, and neither of the two built for AMI-Eval was among
+them — TS3003a is `ch0→Closeup2, ch1→Closeup3, ch2→Closeup4, ch3→Closeup1`. Training on that would
+have paired the wrong face with the wrong voice in roughly 70% of meetings, and it would not have
+failed loudly; it would have surfaced much later as unexplained poor visual conditioning.
+
+`ml/eval/ami_meta.py` now reads the published mapping, and the builder refuses a meeting whose
+mapping is absent rather than guessing. `global_name` comes from the same file, which additionally
+makes genuinely speaker-disjoint splits possible — group-level disjointness is not sufficient,
+because AMI reuses people between groups.
+
+**Repeating the experiment with the corrected mapping still produced no diagonal:** every row picked
+the wrong reference, at the same noise-level magnitudes. That is the useful part. It separates the
+two failures — the mapping was wrong *and*, independently, the motion-energy ASD carries no usable
+signal. Fixing the data bug does not rescue the placeholder, so Light-ASD is a requirement rather
+than an improvement.
+
+Audio-only work is unaffected, as is everything in §2 and §3 above, none of which uses video.
 
 ---
 

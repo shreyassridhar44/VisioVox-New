@@ -27,6 +27,7 @@ ml = [
   "pyloudnorm>=0.1",
   "pysndfx>=0.3.6",
   "tqdm>=4.66",
+  "defusedxml>=0.7",
 ]
 
 [tool.uv.sources]
@@ -131,7 +132,8 @@ module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
           "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
           "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*",
           "pyloudnorm.*", "insightface.*", "aioboto3.*", "botocore.*",
-          "celery.*", "sse_starlette.*"]
+          "celery.*", "sse_starlette.*",
+          "defusedxml.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------------
