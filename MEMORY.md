@@ -42,9 +42,14 @@ ADR-0010 routing is implemented and measured: **93–97% of the AMI timeline is 
 passes through untouched. That is the concrete explanation for the un-routed Tier 0 number coming
 out 10.7 dB below doing nothing — the separator was being run over audio that never needed it.
 
-**Phase 2 in progress:** Postgres schema + Alembic migrations applied and verified. Remaining:
-auth, presigned upload, Celery job state machine + SSE, mock pipeline worker, generated TS client,
-Next.js pages.
+**Phase 2 complete** (2026-08-26). Exit criterion verified against the running stack, not
+in-process: register -> presigned PUT to MinIO -> job queued to Celery -> a real worker picks it up
+-> ready project with a schema-valid manifest and 11 stage rows, in ~11 s.
+
+Delivered: Postgres schema + Alembic · auth with refresh rotation and family reuse detection ·
+ownership as a dependency (invariant 4) · presigned multipart upload · Celery job state machine ·
+SSE progress · mock pipeline worker · generated TS client with a CI drift gate · Next.js app
+(auth, project list, upload, processing view).
 
 **Phase 0 exit evidence:** `make check` green (ruff, mypy strict, eslint, tsc, pytest); `make dev`
 brings up Postgres, Redis, MinIO and mail with every service answering; `make smoke` reports
@@ -57,8 +62,9 @@ brings up Postgres, Redis, MinIO and mail with every service answering; `make sm
 2. **Dataset pipeline** — running unattended in tmux. `librimix` fetches; `dataset` waits for it
    and then generates Libri2Mix (16k / min / mix_both only). Logs in `~/logs/`. Both resumable.
    Generation aborts if the host volume has under 260 GB free.
-3. **Phase 1** — baseline pipeline, pretrained only. The manifest schema is already frozen, so the
-   app track (Phase 2) is unblocked and can start in parallel now.
+3. **Phase 3** — data. LibriMix generation is chained behind the download; VoxCeleb2 needs the
+   credentials the user has; VVX recording is the longest-lead item and should start now that
+   ethics is waived. Consent forms must be signed **before** recording, not after.
 4. **Reclaim `C:`** — `wsl --unregister Ubuntu` removes the superseded distro (~13.5 GB); `C:` is
    down to ~2 GB. The live distro is `VisioVox` at `D:\wsl\VisioVox`; a backup of the original
    sits at `F:\wsl-backup\ext4.vhdx.bak`.
