@@ -131,6 +131,7 @@ def overlap_add(
     sep: WindowedSeparation,
     assignment: np.ndarray,
     total_samples: int,
+    gains: np.ndarray | None = None,
 ) -> np.ndarray:
     """Stitch windows into continuous tracks under a given channel assignment.
 
@@ -139,6 +140,13 @@ def overlap_add(
 
     Uses a Hann window with normalisation by the accumulated envelope, so the
     result is exact regardless of hop -- verified by the reconstruction test.
+
+    `gains[w, k]` optionally rescales window w before it is added. Separation
+    models give no guarantee that the same speaker comes out at the same scale
+    or polarity in two independent calls, and SI-SDR is scale invariant so
+    matching never notices. Overlap-add does: mismatched windows cancel in the
+    overlap region. Correcting scale therefore needs to be possible separately
+    from correcting identity, because they are different failure modes.
     """
     n_src = sep.n_sources
     win = sep.window_samples
@@ -150,7 +158,10 @@ def overlap_add(
         end = min(start + win, total_samples)
         span = end - start
         for k in range(n_src):
-            acc[k, start:end] += sep.estimates[i, assignment[i, k], :span] * w[:span]
+            chunk = sep.estimates[i, assignment[i, k], :span]
+            if gains is not None:
+                chunk = chunk * gains[i, k]
+            acc[k, start:end] += chunk * w[:span]
         env[start:end] += w[:span]
 
     env[env < 1e-8] = 1.0

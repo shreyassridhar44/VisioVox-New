@@ -39,6 +39,7 @@ from pipeline.s5_separate import (
     overlap_add,
     separate_windows,
 )
+from pipeline.vad import speech_masks
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CLIPS = Path.home() / "data" / "testvideos" / "clips"
@@ -87,34 +88,66 @@ def _cost_matrix(estimates_w: np.ndarray, ref_win: np.ndarray) -> np.ndarray:
     return cost
 
 
+def select_targets(references: np.ndarray, k: int) -> np.ndarray:
+    """Indices of the k speakers who talk most, fixed for the whole clip.
+
+    The separator emits fewer channels than an AMI meeting has participants,
+    so some speakers cannot be recovered at all. Choosing the target set once,
+    globally, keeps output track k meaning the same person in every window --
+    which is the property naive stitching is supposed to provide and fails to.
+    Choosing it per window would quietly grade the model on a moving target.
+    """
+    masks = speech_masks(references)
+    activity = masks.mean(axis=1)
+    return np.argsort(activity)[::-1][:k].copy()
+
+
 def oracle_assignment(
-    estimates: np.ndarray, starts: np.ndarray, references: np.ndarray, win: int
-) -> np.ndarray:
-    """Per-window assignment chosen with the references as an answer key.
+    estimates: np.ndarray, starts: np.ndarray, targets: np.ndarray, win: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-window channel->track assignment chosen with the references as key.
 
     Not achievable at inference time -- that is the point. It bounds what any
     perfect stitcher could do with this separator output.
+
+    Returns assignment[w, k] = channel index feeding output track k, so it is
+    a permutation of the channels for every window. An earlier version indexed
+    the output by reference id and dropped matches beyond the channel count,
+    leaving both tracks pointing at channel 0 and scoring worse than naive.
     """
     n_windows, n_src, _ = estimates.shape
-    out = np.zeros((n_windows, n_src), dtype=np.int64)
+    out = np.tile(np.arange(n_src), (n_windows, 1))
+    gains = np.ones((n_windows, n_src), dtype=np.float64)
     for w in range(n_windows):
         s = int(starts[w])
-        ref_win = references[:, s : s + win]
+        ref_win = targets[:, s : s + win]
         if ref_win.shape[1] < win:
             ref_win = np.pad(ref_win, ((0, 0), (0, win - ref_win.shape[1])))
         rows, cols = linear_sum_assignment(_cost_matrix(estimates[w], ref_win))
-        for r, c in zip(rows.tolist(), cols.tolist(), strict=True):
-            if c < n_src:
-                out[w, c] = r
-    return out
+        for channel, track in zip(rows.tolist(), cols.tolist(), strict=True):
+            out[w, track] = channel
+            # Least-squares projection onto the reference. This corrects scale
+            # AND polarity, which the separator does not keep consistent across
+            # independent windows; without it, correctly identified windows
+            # still cancel each other in the overlap region.
+            est = estimates[w, channel]
+            denom = float(np.dot(est, est))
+            gains[w, track] = float(np.dot(est, ref_win[track])) / denom if denom > 1e-12 else 0.0
+    return out, gains
 
 
-def score_tracks(tracks: np.ndarray, references: np.ndarray) -> float:
-    """Mean best-matched SI-SDR between stitched tracks and references."""
-    n = min(tracks.shape[1], references.shape[1])
-    cost = _cost_matrix(tracks[:, :n], references[:, :n])
-    rows, cols = linear_sum_assignment(cost)
-    return float(-cost[rows, cols].mean())
+def score_tracks(tracks: np.ndarray, targets: np.ndarray) -> float:
+    """Mean SI-SDR of track k against target speaker k.
+
+    Deliberately positional, not Hungarian. Re-matching here would let each
+    stitching strategy pick whichever reference flatters it, and would hide
+    exactly the identity errors this baseline exists to expose.
+    """
+    n = min(tracks.shape[1], targets.shape[1])
+    k = min(tracks.shape[0], targets.shape[0])
+    scores = [si_sdr(tracks[i, :n], targets[i, :n]) for i in range(k)]
+    finite = [s for s in scores if np.isfinite(s)]
+    return float(np.mean(finite)) if finite else float("nan")
 
 
 def run_clip(clip_dir: Path, model: Separator) -> ClipResult | None:
@@ -135,19 +168,23 @@ def run_clip(clip_dir: Path, model: Separator) -> ClipResult | None:
     sep = separate_windows(mixture, model)
     win = sep.window_samples
 
+    target_idx = select_targets(references, sep.n_sources)
+    targets = references[target_idx]
+
     report = measure(sep.estimates, sep.starts, references, win)
 
     naive = overlap_add(sep, identity_assignment(sep), n)
-    oracle = overlap_add(sep, oracle_assignment(sep.estimates, sep.starts, references, win), n)
+    oracle_asg, oracle_gains = oracle_assignment(sep.estimates, sep.starts, targets, win)
+    oracle = overlap_add(sep, oracle_asg, n, gains=oracle_gains)
 
-    naive_db = score_tracks(naive, references)
-    oracle_db = score_tracks(oracle, references)
+    naive_db = score_tracks(naive, targets)
+    oracle_db = score_tracks(oracle, targets)
     # SI-SDRi is improvement over doing nothing: feeding the mixture itself
     # as every estimate. Absolute SI-SDR is not comparable across clips
     # because it depends on how much of the mixture each speaker occupies,
     # and docs/25 section 4 states the Tier 0 expectation as SI-SDRi.
     mixture_tracks = np.tile(mixture[None, :], (naive.shape[0], 1))
-    mixture_db = score_tracks(mixture_tracks, references)
+    mixture_db = score_tracks(mixture_tracks, targets)
 
     out = clip_dir / "baseline"
     out.mkdir(exist_ok=True)
