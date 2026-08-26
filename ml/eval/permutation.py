@@ -31,6 +31,8 @@ from itertools import pairwise
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+from pipeline.vad import FRAME_SAMPLES, speech_masks
+
 EPS = 1e-8
 
 
@@ -69,17 +71,12 @@ class PermutationReport:
         return "naive stitching unusable — F1.1 confirmed"
 
 
-def _active(x: np.ndarray, floor_db: float = -50.0) -> bool:
-    """Is there enough signal here to make an assignment meaningful?"""
-    rms = float(np.sqrt(np.mean(x**2) + EPS))
-    return bool(20.0 * np.log10(rms + EPS) > floor_db)
-
-
 def measure(
     estimates: np.ndarray,
     starts: np.ndarray,
     references: np.ndarray,
     window_samples: int,
+    min_overlap_frames: int = 10,
 ) -> PermutationReport:
     """
     estimates:  (n_windows, n_sources, window_samples)
@@ -89,6 +86,7 @@ def measure(
     n_windows, n_src, _ = estimates.shape
     n_ref = references.shape[0]
     k = min(n_src, n_ref)
+    ref_masks = speech_masks(references)
 
     assignments: list[tuple[int, ...]] = []
     best_scores: list[float] = []
@@ -102,9 +100,14 @@ def measure(
             pad = window_samples - ref_win.shape[1]
             ref_win = np.pad(ref_win, ((0, 0), (0, pad)))
 
-        # A window where fewer than two references are active carries no
-        # information about ordering; scoring it would dilute the rate.
-        if sum(_active(ref_win[r]) for r in range(n_ref)) < 2:
+        # A window where two speakers are never simultaneously active carries
+        # no information about ordering; scoring it would dilute the rate.
+        # Activity uses the shared dominance VAD: an absolute dB floor marks
+        # bleed and room tone as speech on hotter recordings, which made one
+        # AMI meeting score every single window as overlapped.
+        f0 = s // FRAME_SAMPLES
+        f1 = f0 + window_samples // FRAME_SAMPLES
+        if int((ref_masks[:, f0:f1].sum(axis=0) >= 2).sum()) < min_overlap_frames:
             skipped += 1
             assignments.append(())
             continue

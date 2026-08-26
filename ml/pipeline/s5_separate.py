@@ -43,6 +43,9 @@ VERSION = "1.0.0"
 # 16 kHz checkpoint. sepformer-wsj02mix is 8 kHz and silently resamples,
 # which would make these numbers incomparable with everything else.
 DEFAULT_MODEL = "speechbrain/sepformer-whamr16k"
+# SpeechBrain expects "<kind>:<index>"; a bare "cuda" logs a parse warning
+# on every call before falling back to device 0.
+DEFAULT_DEVICE = "cuda:0"
 
 WINDOW_SECONDS = 4.0
 HOP_SECONDS = 2.0  # 50% overlap: every interior sample is covered twice
@@ -72,7 +75,7 @@ class WindowedSeparation:
 
 
 def load_separator(
-    model_name: str = DEFAULT_MODEL, device: str = "cuda", cache: Path | None = None
+    model_name: str = DEFAULT_MODEL, device: str = DEFAULT_DEVICE, cache: Path | None = None
 ) -> Separator:
     from speechbrain.inference.separation import SepformerSeparation
 
@@ -90,7 +93,7 @@ def separate_windows(
     model: Separator,
     window_seconds: float = WINDOW_SECONDS,
     hop_seconds: float = HOP_SECONDS,
-    device: str = "cuda",
+    device: str = DEFAULT_DEVICE,
 ) -> WindowedSeparation:
     """Run the separator over sliding windows. No stitching, no reordering."""
     win = int(window_seconds * ANALYSIS_SAMPLE_RATE)
@@ -162,7 +165,7 @@ def identity_assignment(sep: WindowedSeparation) -> np.ndarray:
 def separate(
     audio: np.ndarray,
     model: Separator,
-    device: str = "cuda",
+    device: str = DEFAULT_DEVICE,
 ) -> tuple[WindowedSeparation, StageResult]:
     t0 = time.perf_counter()
     result = StageResult(stage=STAGE, status=StageStatus.OK)

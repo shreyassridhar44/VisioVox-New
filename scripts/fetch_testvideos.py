@@ -30,6 +30,8 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from pipeline.vad import speech_masks
+
 BASE = "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus"
 OUT = Path.home() / "data" / "testvideos"
 RAW = OUT / "raw"
@@ -140,33 +142,6 @@ def load_mono_16k(path: Path) -> np.ndarray:
     return audio
 
 
-def speech_masks(tracks: list[np.ndarray], dominance_db: float = 15.0) -> np.ndarray:
-    """Per-speaker speech mask at 10 ms resolution, robust to headset bleed.
-
-    A close-talking headset picks up the other participants. Measured on AMI,
-    that bleed sits about 28 dB below the actual talker, so a per-track
-    threshold -- which is what a naive VAD applies -- marks bleed as speech and
-    reports near-total overlap. The first version of this function did exactly
-    that and claimed 80% overlap on a clip that is mostly one person talking.
-
-    Two conditions instead: the frame must be loud relative to that speaker's
-    own speech level, and it must be within `dominance_db` of the loudest
-    channel at that instant. Bleed fails the second.
-
-    Returns (n_speakers, n_frames) of bool.
-    """
-    frame = 160  # 10 ms at 16 kHz
-    n = min(len(t) for t in tracks) // frame
-    stacked = np.stack([t[: n * frame] for t in tracks])
-    energy = (stacked**2).reshape(len(tracks), n, frame).mean(axis=2)
-    db = 10 * np.log10(energy + 1e-12)
-
-    own_floor = np.percentile(db, 99, axis=1, keepdims=True) - 20
-    frame_max = db.max(axis=0, keepdims=True)
-    mask: np.ndarray = (db > own_floor) & (db > frame_max - dominance_db)
-    return mask
-
-
 def pick_overlap_window(masks: np.ndarray, seconds: int) -> tuple[int, float]:
     """Return (start_frame, overlap_ratio) for the densest-overlap window.
 
@@ -212,7 +187,7 @@ def build(meeting: Meeting) -> dict[str, object] | None:
     n = min(len(h) for h in headsets)
     headsets = [h[:n] for h in headsets]
 
-    masks = speech_masks(headsets)
+    masks = speech_masks(np.stack(headsets))
     start_frame, overlap = pick_overlap_window(masks, CLIP_SECONDS)
     start_s = start_frame / 100.0
     print(f"    window {start_s:.1f}s +{CLIP_SECONDS}s, overlap ratio {overlap:.3f}")
