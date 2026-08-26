@@ -103,14 +103,24 @@ def main(argv: list[str]) -> int:
     # and the failure only surfaces much later inside generation.
     if args.metadata.is_dir():
         expected = {f"sp{str(s).replace('.', '')}" for s in SPEEDS}
-        blob = "".join(
-            f.read_text(errors="ignore")[:200_000] for f in sorted(args.metadata.glob("*.csv"))[:2]
-        )
-        missing = {tag for tag in expected if tag not in blob}
-        if missing:
-            print(f"ABORT: metadata never references {sorted(missing)} — wrong speeds")
-            return 2
-        print(f"naming contract ok: metadata references {sorted(expected)}")
+        # Only the TRAIN metadata references augmented noise — dev and test use
+        # the originals. Scanning alphabetically-first files found the dev
+        # csvs, saw no sp tags, and aborted a correct configuration.
+        train_csvs = sorted(args.metadata.glob("*train*.csv"))
+        if not train_csvs:
+            print(f"note: no train metadata under {args.metadata}; skipping contract check")
+        else:
+            found: set[str] = set()
+            for f in train_csvs:
+                blob = f.read_text(errors="ignore")
+                found |= {tag for tag in expected if tag in blob}
+                if found == expected:
+                    break
+            missing = expected - found
+            if missing:
+                print(f"ABORT: train metadata never references {sorted(missing)} — wrong speeds")
+                return 2
+            print(f"naming contract ok: train metadata references {sorted(expected)}")
 
     print(f"augmenting {len(originals)} files at speeds {SPEEDS} ...", flush=True)
     created = 0
