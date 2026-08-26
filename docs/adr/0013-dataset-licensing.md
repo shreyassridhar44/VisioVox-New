@@ -39,7 +39,7 @@ research results.
   ablations. Never deployed.
 - **Production checkpoint** — trained only on LibriMix, VoxCeleb2, AVSpeech and VVX. Deployed.
 
-Both evaluated on VVX-Eval, so the gap between them is measured and reported.
+Both evaluated on AMI-Eval, so the gap between them is measured and reported.
 
 ## Decision
 

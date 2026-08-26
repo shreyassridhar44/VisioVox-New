@@ -127,11 +127,11 @@ Priority uses MoSCoW: **M**ust / **S**hould / **C**ould / **W**on't (v1).
 
 | ID | Requirement | Target | Floor |
 |---|---|---|---|
-| NFR-ML-01 | SI-SDRi, 2 speakers, VVX-Eval | ≥ 14 dB | 11 dB |
-| NFR-ML-02 | SI-SDRi, 3 speakers, VVX-Eval | ≥ 11 dB | 8 dB |
+| NFR-ML-01 | SI-SDRi, 2 speakers, AMI-Eval | ≥ 14 dB | 11 dB |
+| NFR-ML-02 | SI-SDRi, 3 speakers, AMI-Eval | ≥ 11 dB | 8 dB |
 | NFR-ML-03 | SIR (interferer suppression), 2 spk | ≥ 20 dB | 16 dB |
 | NFR-ML-04 | DNSMOS-P.835 OVRL | ≥ 3.2 | 3.0 |
-| NFR-ML-05 | Target-speaker WER, VVX-Eval | ≤ 15% | 22% |
+| NFR-ML-05 | Target-speaker WER, AMI-Eval | ≤ 15% | 22% |
 | NFR-ML-06 | Cross-stream leakage word rate | ≤ 3% | 6% |
 | NFR-ML-07 | Diarization error rate (DER) | ≤ 12% | 18% |
 | NFR-ML-08 | Speaker-count accuracy (2–4) | ≥ 92% | 85% |
@@ -290,7 +290,7 @@ Feature: Speaker isolation and selection
 
 | Goal | Requirements | Verified by |
 |---|---|---|
-| G1 Isolation | FR-PIPE-04/05/06, NFR-ML-01/02 | Eval harness on VVX-Eval |
+| G1 Isolation | FR-PIPE-04/05/06, NFR-ML-01/02 | Eval harness on AMI-Eval |
 | G2 Suppression | NFR-ML-03/06 | Eval harness + listening test |
 | G3 Listenability | FR-PIPE-07/10, NFR-ML-04 | DNSMOS + MOS panel |
 | G4 Switching | FR-PLAY-03/05/06, NFR-PERF-03 | Playwright timing harness |

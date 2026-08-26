@@ -56,7 +56,7 @@ Complete documentation set. Start with the reading paths below rather than readi
 | 03 | [Research Landscape](./03-research-landscape.md) | BSS vs TSE, prior art, where the real gap is |
 | 04 | [Novelty](./04-novelty.md) | Five contributions, each with a falsifiable claim and ablation |
 | 05 | [ML Architecture](./05-ml-architecture.md) | The 10-stage pipeline, SEAVE model, artifact manifest |
-| 06 | [Datasets](./06-datasets.md) | Four tiers, simulation, the VVX corpus, licensing |
+| 06 | [Datasets](./06-datasets.md) | Four tiers, simulation, AMI-Eval, licensing |
 | 07 | [Training Playbook](./07-training-playbook.md) | Curriculum, config, monitoring, failure modes, compute budget |
 | 08 | [Evaluation Protocol](./08-evaluation-protocol.md) | Metrics, harness, ablation suite, listening test, report structure |
 

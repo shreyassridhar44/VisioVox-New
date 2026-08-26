@@ -174,7 +174,7 @@ mismatch is itself a finding worth stating.
 
 ## 5. Ablation suite
 
-Every ablation: 3 seeds, VVX-Eval, paired bootstrap significance.
+Every ablation: 3 seeds, AMI-Eval, paired bootstrap significance.
 
 ### A1 — Architecture (validates F1 of the review)
 | System | Question |
@@ -221,7 +221,7 @@ Runs in CI on every model change:
 
 ```
 CI-EVAL-QUICK   30 items, ~5 min   → every PR touching ml/
-CI-EVAL-FULL    VVX-Eval, ~2 h     → nightly + pre-release
+CI-EVAL-FULL    AMI-Eval, ~2 h     → nightly + pre-release
 ```
 
 **Regression gates (blocking):**
@@ -262,7 +262,7 @@ State plainly, without hedging:
   unusable.
 - **Off-screen speakers** fall back to audio-only with measured quality loss.
 - **Generative restoration can hallucinate.** Report the measured rate, not zero.
-- **VVX-Eval is small** (6 sessions, 12 speakers) and English-only. Results may not generalise
+- **AMI-Eval is small** (6 sessions, 12 speakers) and English-only. Results may not generalise
   across languages, accents or recording conditions.
 - **Headset reference bleed** bounds measurable SI-SDR. Report the measured bleed floor.
 - **Domain scope** — the model was trained and evaluated on conversational speech in rooms. No claim

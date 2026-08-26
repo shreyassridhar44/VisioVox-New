@@ -53,7 +53,7 @@ or broadcast without re-evaluation · languages absent from training data.
 | Hardware, wall clock | |
 | Seeds | |
 
-## Evaluation — VVX-Eval
+## Evaluation — AMI-Eval
 
 Mean ± 95% CI, 3 seeds. Report by slice, not only aggregate.
 

@@ -9,8 +9,8 @@ Risks marked ⭐ are carried forward from the archived roadmap §9, which identi
 
 | ID | Risk | Imp | Lik | Sev | Mitigation | Trigger | Fallback |
 |---|---|---|---|---|---|---|---|
-| **R-01** ⭐ | 3–4 speaker quality below listenable threshold | H | H | 🔴 | AV conditioning; suppression loss; per-segment confidence | SI-SDRi < 8 dB at 3 spk on VVX-Val | Publish the degradation curve; cap the demo at 3; warn in-product at 4 |
-| **R-02** | Benchmark gains don't transfer to real recordings | H | H | 🔴 | Realistic simulation; dereverb front-end; VVX in-domain fine-tune | VVX-Eval < 60% of Libri2Mix gain | More aggressive simulation; more VVX data; report the gap honestly |
+| **R-01** ⭐ | 3–4 speaker quality below listenable threshold | H | H | 🔴 | AV conditioning; suppression loss; per-segment confidence | SI-SDRi < 8 dB at 3 spk on AMI-Val | Publish the degradation curve; cap the demo at 3; warn in-product at 4 |
+| **R-02** | Benchmark gains don't transfer to real recordings | H | H | 🔴 | Realistic simulation; dereverb front-end; VVX in-domain fine-tune | AMI-Eval < 60% of Libri2Mix gain | More aggressive simulation; more VVX data; report the gap honestly |
 | **R-03** | Visual conditioning shows no measurable gain | H | M | 🟠 | Verify ROI/audio alignment frame-by-frame at C2 start | C2 < +0.5 dB over C1 | Debug alignment first (usual cause); else ship audio-only TSE — Novelties 1,3,4,5 survive |
 | **R-04** ⭐ | Isolated audio is artifact-y despite good SI-SDR | M | H | 🟠 | MRSTFT loss; gated restoration; listening test | DNSMOS < 3.0 | Enable restoration more aggressively; document as a limitation |
 | **R-05** | Generative restoration hallucinates words | H | M | 🟠 | Fidelity gate refuses on very low φ; Faithful is default; ASR cross-check | Hallucination rate > 0.5% | Tighten the gate; if unfixable, disable S6 entirely |
@@ -54,9 +54,9 @@ Risks marked ⭐ are carried forward from the archived roadmap §9, which identi
 | ID | Risk | Imp | Lik | Sev | Mitigation | Fallback |
 |---|---|---|---|---|---|---|
 | **R-24** ⭐ | Dataset licensing blocks commercial use | H | M | 🟠 | Production checkpoint trained only on permissive data; per-checkpoint model card | LRS3 for research ablations only |
-| **R-25** | VVX recording slips or under-delivers | H | M | 🟠 | Start week 4; ethics approval first; recruit early | AMI headset channels as the eval substitute |
-| **R-26** | VVX data loss | 🔴 Critical | L | 🟠 | Encrypted offsite 3-2-1 backup; quarterly restore test | Irreplaceable — no fallback. Backups are the mitigation. |
-| **R-27** | Participant withdraws consent | M | L | 🟢 | Consent tracking; retrain without them | Documented retrain cycle |
+| **R-25** | ~~VVX recording slips~~ | — | — | ✅ | **Realised 2026-08-26; contingency executed** | AMI is now the eval basis ([ADR-0015](./adr/0015-ami-replaces-vvx.md)) |
+| **R-26** | ~~VVX data loss~~ | — | — | ✅ | **Closed** — no self-recorded data exists | Every dataset is re-downloadable |
+| **R-27** | ~~Participant withdraws consent~~ | — | — | ✅ | **Closed** — no participants are recorded | — |
 | **R-28** | Speaker leakage between train and eval splits | H | M | 🟠 | Automated disjointness check in CI | Results are invalid until fixed — check runs on every split change |
 
 R-28 deserves emphasis: split leakage silently inflates every number in the report and is only

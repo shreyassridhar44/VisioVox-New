@@ -85,7 +85,7 @@ Two details that matter and are not obvious:
 | Naive mean over all attributed audio (overlap included) | worst — contamination |
 
 **Falsified if:** purity-weighted aggregation does not beat longest-region selection by ≥ 0.5 dB
-SI-SDRi on VVX-Eval.
+SI-SDRi on AMI-Eval.
 
 ---
 
@@ -311,7 +311,7 @@ leakage detector**, and it is available for free because we already run ASR per 
 4. SCORE
    trust(segment, speaker) = f(leakage density, attribution margin, extraction confidence,
                                modality availability, φ from Contribution 4)
-   Calibrated on VVX-Eval so that stated confidence matches observed accuracy.
+   Calibrated on AMI-Eval so that stated confidence matches observed accuracy.
 ```
 
 The `UNRESOLVED` state is deliberate. When evidence is genuinely ambiguous, the system keeps the

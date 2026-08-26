@@ -285,7 +285,7 @@ Three cautions that must appear in the final report:
 
 1. **Benchmark numbers do not transfer.** A 23 dB SI-SDRi on WSJ0-2mix does not mean 23 dB on your
    phone recording of a dinner conversation. Expect a large drop. Our targets in
-   [`01-requirements.md`](./01-requirements.md) §2.1 are set against **VVX-Eval (real recordings)**,
+   [`01-requirements.md`](./01-requirements.md) §2.1 are set against **AMI-Eval (real recordings)**,
    deliberately, and are much lower than published benchmark figures. They are not less ambitious —
    they are measured on harder data.
 2. **SI-SDR is a mixture of failure modes.** Distortion, residual noise and interferer leakage all

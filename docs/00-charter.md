@@ -34,11 +34,11 @@ during playback, with per-speaker captions.*
 
 | # | Goal | Measure of success |
 |---|---|---|
-| G1 | Isolate each speaker into a full-length, video-aligned audio track | ≥ 12 dB SI-SDRi on the held-out real-world eval set (VVX-Eval) |
+| G1 | Isolate each speaker into a full-length, video-aligned audio track | ≥ 12 dB SI-SDRi on the held-out real-world eval set (AMI-Eval) |
 | **G2** ⭐ | **Make the *unselected* speakers effectively inaudible** | **≥ 18 dB SIR; silence-region leakage ≤ −30 dB; cross-stream leakage word rate ≤ 3%** |
 | G3 | Isolated audio must be pleasant to *listen* to, not merely transcribable | DNSMOS-P.835 OVRL ≥ 3.2; informal MOS ≥ 3.5/5 |
 | G4 | Speaker switching is instant and stays in sync | Switch latency ≤ 120 ms; A/V drift ≤ 40 ms sustained over 10 min |
-| G5 | Per-speaker captions, accurate and word-aligned | Target-speaker WER ≤ 15% on VVX-Eval; word timing median error ≤ 120 ms |
+| G5 | Per-speaker captions, accurate and word-aligned | Target-speaker WER ≤ 15% on AMI-Eval; word timing median error ≤ 120 ms |
 | G6 | Production-grade, secure, deployable web application | Passes the release gate in [`19-testing-strategy.md`](./19-testing-strategy.md) §9 |
 | G7 | Demonstrable novelty over prior art | Five contribution axes in [`04-novelty.md`](./04-novelty.md), each with an ablation |
 | G8 | A landing page and player people describe as good-looking | Lighthouse ≥ 95 across all four categories; ≤ 2.5 s LCP on mid-tier mobile |
@@ -86,7 +86,7 @@ A release is done when all of these hold simultaneously:
 2. **Player** — selecting a speaker swaps audio and captions with no perceptible seam, correct after
    seeking, scrubbing, rate change and tab-backgrounding.
 3. **Model** — trained AV-TSE model beating both (a) the blind-separation baseline and (b) the
-   audio-only TSE baseline on VVX-Eval, with a published ablation per contribution axis.
+   audio-only TSE baseline on AMI-Eval, with a published ablation per contribution axis.
 4. **Application** — authenticated, rate-limited, sandboxed, observable, deployed via CI/CD to a
    live environment, with a runbook and rollback path.
 5. **Evaluation** — a written report with quantitative results, degradation curves by speaker count
@@ -132,7 +132,7 @@ A release is done when all of these hold simultaneously:
 | ID | Risk | Severity | Mitigation |
 |---|---|---|---|
 | R-01 | 3-speaker extraction quality below listenable threshold | High | Report degradation curve honestly; cap demo at 3; surface per-segment confidence |
-| R-02 | Real-world domain gap collapses benchmark gains | High | In-domain fine-tune on VVX-Train; dereverb front-end; realistic simulation |
+| R-02 | Real-world domain gap collapses benchmark gains | High | In-domain fine-tune on AMI-Train; dereverb front-end; realistic simulation |
 | R-03 | Generative restoration hallucinates words | High | Faithful track is default; gate on fidelity; label clearly; ASR cross-check |
 | R-04 | Dataset licensing blocks AV training | Medium | Tiered fallback: VoxCeleb2 + AVSpeech + self-recorded |
 | R-05 | GPU cost overruns | Medium | Scale-to-zero, per-user quotas, duration caps, cost alerting |

@@ -54,6 +54,11 @@ recording conditions. Detailed below.
 **Cons:** Too small for a speaker-disjoint eval split, and a headline number computed on three
 sessions invites more doubt than it resolves. Worse than a clean substitution honestly labelled.
 
+**This fallback was designed in advance.** `21-implementation-plan.md` §66 states that if VVX
+never happens, AMI's close-talking headset channels provide per-speaker references for real
+overlapping speech, and `22-risk-register.md` carries it as **R-25**. This ADR executes that
+contingency and settles the details it left open — which cameras, and how the splits work.
+
 ## Decision
 
 **AMI becomes the primary in-domain evaluation set, as `AMI-Eval`.** It is built from per-participant

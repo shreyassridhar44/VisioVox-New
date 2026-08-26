@@ -176,9 +176,14 @@ Published list with DPAs; users notified 30 days before any addition.
 
 ---
 
-## 8. Research-specific obligations (VVX corpus)
+## 8. Research-specific obligations (if recording ever happens)
 
-Recording the VVX dataset is human-subjects research involving biometric data.
+> **Not currently applicable.** The VVX corpus was cancelled
+> ([ADR-0015](./adr/0015-ami-replaces-vvx.md)) and no participants are recorded. This section is
+> retained because it becomes binding the moment any recording is done, and the consent template
+> in `templates/vvx-consent-form.md` stays ready for that.
+
+Recording a participant dataset is human-subjects research involving biometric data.
 
 - [ ] Ethics board / IRB approval **before** any recording
 - [ ] Written informed consent per participant, covering: research use, model training, retention

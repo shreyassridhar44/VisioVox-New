@@ -225,7 +225,7 @@ make smoke-test ENV=production
 Checkpoints are in object storage. Provision a cloud GPU, restore the last checkpoint, resume.
 Loss is bounded to one epoch.
 
-### VVX corpus loss
+### VVX corpus loss (no longer applicable — ADR-0015)
 No recovery path — it cannot be re-recorded identically. **Restore from the encrypted offsite
 backup.** Verify that backup quarterly; this is the one dataset where an untested backup is
 unacceptable (R-26).

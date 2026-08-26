@@ -165,7 +165,7 @@ merge to main
   └─ deploy production (rolling, canary 10% → 100%)
 
 nightly
-  ├─ full ML eval on VVX-Eval
+  ├─ full ML eval on AMI-Eval
   ├─ dependency audit
   ├─ backup restore verification
   └─ deletion verification job

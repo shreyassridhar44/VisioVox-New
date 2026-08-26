@@ -269,7 +269,7 @@ are YouTube-derived with link-rot and their own terms). See [`06-datasets.md`](.
 
 **Retained from the original, and strongly endorsed:** record your own overlapping-speech videos
 early. The original document is right that this is what makes the demo and the domain-shift
-fine-tuning story credible. We formalise it as the **VVX-Eval** held-out set with a documented
+fine-tuning story credible. We formalise it as the **AMI-Eval** held-out set with a documented
 recording protocol.
 
 ### F8 — Metric set does not measure the actual requirement ⚠️

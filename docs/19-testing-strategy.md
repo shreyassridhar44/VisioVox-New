@@ -148,7 +148,7 @@ Two tiers:
 | Tier | Scope | When | Gate |
 |---|---|---|---|
 | `CI-EVAL-QUICK` | 30 items, ~5 min | Every PR touching `ml/` | Blocking |
-| `CI-EVAL-FULL` | VVX-Eval, ~2 h | Nightly + pre-release | Blocking on release |
+| `CI-EVAL-FULL` | AMI-Eval, ~2 h | Nightly + pre-release | Blocking on release |
 
 Regression gates (from [`08-evaluation-protocol.md`](./08-evaluation-protocol.md) §6):
 

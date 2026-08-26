@@ -78,7 +78,7 @@ none of.
 
 > **Licensing decision.** LRS2/LRS3 are non-commercial research-only. If VisioVox is ever
 > commercialised, models trained on them cannot ship. **Mitigation: train the production model on
-> VoxCeleb2 + AVSpeech + VVX-Train only, and use LRS3 solely for the research ablations reported in
+> VoxCeleb2 + AVSpeech + AMI-Train only, and use LRS3 solely for the research ablations reported in
 > the paper.** Track which checkpoint saw which data in the model card. Decided in
 > [ADR-0013](./adr/0013-dataset-licensing.md).
 
@@ -192,11 +192,11 @@ readers can interpret the numbers correctly.
 
 | Split | Sessions | Use | Rule |
 |---|---|---|---|
-| VVX-Train | 18 | In-domain fine-tuning | — |
-| VVX-Val | 6 | Hyperparameters, early stopping | — |
-| **VVX-Eval** | **6** | **All reported results** | **Speaker-disjoint AND room-disjoint from train. Touched only at milestone evaluations.** |
+| AMI-Train | 18 | In-domain fine-tuning | — |
+| AMI-Val | 6 | Hyperparameters, early stopping | — |
+| **AMI-Eval** | **6** | **All reported results** | **Speaker-disjoint AND room-disjoint from train. Touched only at milestone evaluations.** |
 
-**Leakage discipline:** no speaker and no room appears in both VVX-Train and VVX-Eval. Speaker
+**Leakage discipline:** no speaker and no room appears in both AMI-Train and AMI-Eval. Speaker
 overlap between splits is the most common way separation results become quietly meaningless — the
 model memorises voices instead of learning to separate.
 

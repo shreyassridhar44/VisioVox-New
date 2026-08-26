@@ -74,7 +74,7 @@ systemctl is-active ssh sshd 2>/dev/null || echo "no SSH — you must work at th
 | No admin rights | Docker likely unavailable → run services natively or use rootless Podman. Training still works (PyTorch needs no admin). |
 | Home is network-mounted | Put `~/data` on local NVMe and symlink. Non-negotiable. |
 | GPU shared with other users | Coordinate scheduling; always `nvidia-smi` before launching; keep per-epoch checkpoints |
-| Machine gets reimaged | Treat it as ephemeral: code from git, checkpoints synced off after every stage, **VVX backed up elsewhere** |
+| Machine gets reimaged | Treat it as ephemeral: code from git, checkpoints synced off after every stage. Every dataset is re-downloadable since VVX was cancelled (ADR-0015) |
 | HuggingFace blocked | Download weights on the laptop, transfer manually; set `HF_HUB_OFFLINE=1` |
 | Slurm/PBS scheduler | Wrap training in a job script; the checkpoint-resume design already handles preemption |
 | < 510 GB free | Use the minimum dataset set in §6; cut in the order given there |

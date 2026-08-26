@@ -156,8 +156,10 @@ truth references for genuinely overlapping speech. Under-used and valuable here.
 
 **AVA-ActiveSpeaker** — ASD benchmark.
 
-**VVX-Train / VVX-Val / VVX-Eval** — This project's own recorded corpus, with per-speaker reference
-microphones. **All headline results are reported on VVX-Eval.**
+**AMI-Train / AMI-Val / AMI-Eval** — Splits of the AMI Meeting Corpus, using each participant's
+own headset microphone as a per-speaker reference and their Closeup camera as the face track.
+**All headline results are reported on AMI-Eval**, and are meeting-domain results rather than
+general ones. Replaced the planned self-recorded VVX corpus; see ADR-0015.
 
 ---
 

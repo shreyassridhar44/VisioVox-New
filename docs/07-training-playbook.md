@@ -21,8 +21,8 @@ time than the gate costs.
 | **C0 Smoke** | 100 samples | random | 200 | Overfits to < 0.1 loss. *Proves the loop, nothing else.* |
 | **C1 Audio-only TSE** | Libri2Mix | ⭐ **pretrained separation ckpt** | ~60 | ≥ 13 dB SI-SDRi on Libri2Mix test |
 | **C2 Add visual** | VoxCeleb2-Mix | C1 weights | ~80 | ≥ +1.5 dB over C1 on same-gender pairs |
-| **C3 Realistic sim** | VVX-sim (§5 of datasets) | C2 | ~60 | ≥ 10 dB SI-SDRi on realistic sim |
-| **C4 In-domain** | VVX-Train | C3 | ~30 | Meets NFR-ML targets on VVX-Val |
+| **C3 Realistic sim** | Realistic simulation (§5 of datasets) | C2 | ~60 | ≥ 10 dB SI-SDRi on realistic sim |
+| **C4 In-domain** | AMI-Train | C3 | ~30 | Meets NFR-ML targets on AMI-Val |
 
 **C1 initialises from a pretrained checkpoint**, not from random weights. A SepFormer or Conv-TasNet
 encoder/separator trained on Libri2Mix already knows how to separate; what it does not know is how to
@@ -241,7 +241,7 @@ they are not optional, they are what makes the results interpretable.
 | Baseline | Purpose |
 |---|---|
 | B1: Pretrained SepFormer (Libri2Mix), off-the-shelf | "What you get for free" — the original roadmap's plan |
-| B2: SepFormer fine-tuned on VVX-Train | The original roadmap's *full* proposal, honestly executed |
+| B2: SepFormer fine-tuned on AMI-Train | The original roadmap's *full* proposal, honestly executed |
 | B3: Audio-only TSE (our C1 checkpoint) | Isolates the value of visual conditioning |
 | B4: SEAVE without suppression loss | Ablates Novelty 3 |
 | B5: SEAVE with oracle enrolment | Upper bound for Novelty 1 |
@@ -263,7 +263,7 @@ must be revised. Design the experiment so it *could* say that.
 | Great SI-SDR, audible other speaker | Exactly the SI-SDR blind spot | Confirms Novelty 3's premise; raise λ₂ |
 | Visual makes no difference | ROIs misaligned or time-misaligned with audio | Verify ROI/audio alignment on a visualised sample **frame by frame** |
 | Val >> train performance | Val set easier, or a leak | Check split disjointness |
-| Works on sim, fails on VVX | Domain gap | More aggressive simulation realism; more C4 |
+| Works on sim, fails on AMI | Domain gap | More aggressive simulation realism; more C4 |
 | Same-gender pairs much worse | Known audio-only weakness | Should improve at C2 — if not, visual pathway is broken |
 
 ---
@@ -307,7 +307,7 @@ batches raise utilisation, and C1 starts from a pretrained checkpoint rather tha
 **Wall clock:** ~9 weeks at 8 h/day of exclusive access; ~4–5 weeks with overnight runs. This is the
 critical path and drives [`21-implementation-plan.md`](./21-implementation-plan.md).
 
-**If over budget:** reduce ablation seeds to 2 · run ablations on a VVX-Eval subset · rent cloud GPUs
+**If over budget:** reduce ablation seeds to 2 · run ablations on an AMI-Eval subset · rent cloud GPUs
 for the ablation sweep — it parallelises perfectly, so 150 h across 8 spot instances is under a day
 for roughly $40.
 

@@ -37,7 +37,7 @@ Only two of these are worth doing before Phase 0. The rest can start later witho
 | **HuggingFace token + accept pyannote licences** | 5 minutes | Phase 0 smoke test | ⭐ **Now** |
 | **Start LibriMix download** | 2–5 days unattended | Phase 3 | ⭐ **Now** — slow, needs no supervision |
 | Workstation pre-flight | 1 hour | Everything | Now — [`25-compute-and-hardware.md`](./25-compute-and-hardware.md) §1b |
-| Recruit VVX participants | 1–3 weeks | Phase 3 | By week 2 |
+| ~~Recruit VVX participants~~ | — | cancelled (ADR-0015) | — |
 | Ethics clearance (if required) | 0–6 weeks | Phase 3 only | See below |
 | LRS3 research agreement | 2–8 weeks, may be denied | Nothing — optional | Anytime, or never |
 
@@ -63,10 +63,11 @@ submit it then and keep building — you have four weeks of runway.
 needs no approval to use, costs nothing, and is what actually protects the participants and makes
 the data usable in a report. This is the part that is genuinely non-negotiable.
 
-**If VVX never happens at all:** the fallback is already designed. AMI's close-talking headset
-channels provide per-speaker references for real overlapping conversational speech — weaker than
-purpose-recorded data, but real and publishable. Documented as R-25 in
-[`22-risk-register.md`](./22-risk-register.md).
+**VVX did not happen, and the fallback has been executed.** AMI's close-talking headset channels
+provide per-speaker references for real overlapping conversational speech — weaker than
+purpose-recorded data, but real and publishable. This was R-25 in
+[`22-risk-register.md`](./22-risk-register.md); it is now
+[ADR-0015](./adr/0015-ami-replaces-vvx.md).
 
 ---
 
@@ -162,17 +163,17 @@ No GPU involved.
 | Acquire VoxCeleb2; pre-extract mouth ROIs to a packed format |
 | Acquire AMI (headset + far-field + video) |
 | Build the realistic mixture simulator ([`06-datasets.md`](./06-datasets.md) §5) |
-| **⭐ Record VVX corpus** — 30 sessions, per-speaker reference mics, ethics approval first |
+| ~~Record VVX corpus~~ — **cancelled**; build **AMI-Eval** instead (`scripts/build_ami_eval.py`), per [ADR-0015](./adr/0015-ami-replaces-vvx.md) |
 | Define splits with verified speaker- and room-disjointness |
 | Build the evaluation harness ([`08-evaluation-protocol.md`](./08-evaluation-protocol.md) §2) |
 
-**Exit:** dataloaders produce correct batches at ≥ 85% GPU utilisation. VVX recorded, aligned,
-split. Harness reproduces published SepFormer numbers on Libri2Mix within ~1 dB — which validates
+**Exit:** dataloaders produce correct batches at ≥ 85% GPU utilisation. AMI-Eval built, aligned
+and split room- and speaker-disjoint. Harness reproduces published SepFormer numbers on Libri2Mix within ~1 dB — which validates
 the harness, not the model.
 
-> **Start VVX recording in week 4.** It needs ethics approval, scheduling 12 people, and equipment.
-> It is the longest-lead item in the project and the one most likely to slip. The archived roadmap
-> was right to push this early; it deserves to be earlier still.
+> **VVX is cancelled** ([ADR-0015](./adr/0015-ami-replaces-vvx.md)). What was the longest-lead
+> item is now a download, which removes the largest schedule risk in the project — at the cost
+> of every headline number becoming a meeting-domain result rather than a general one.
 
 ---
 
@@ -184,11 +185,11 @@ the harness, not the model.
 | 4b | 7–10 | C1: audio-only TSE on Libri2Mix → ≥ 13 dB SI-SDRi |
 | 4c | 10–12 | C2: add visual pathway + reliability gates + modality dropout → ≥ +1.5 dB on same-gender |
 | 4d | 12–13 | C3: realistic simulation |
-| 4e | 13–14 | C4: VVX-Train fine-tune |
+| 4e | 13–14 | C4: AMI-Train fine-tune |
 
 Per [`07-training-playbook.md`](./07-training-playbook.md).
 
-**Exit:** meets NFR-ML-01/02/03/04 floors on VVX-Val. Checkpoint versioned with a model card.
+**Exit:** meets NFR-ML-01/02/03/04 floors on AMI-Val. Checkpoint versioned with a model card.
 
 **Checkpoints:** if 4b misses 13 dB by week 10, stop and diagnose rather than pushing forward —
 every later stage builds on it. Contingency in §5.
@@ -245,7 +246,7 @@ Zero axe violations. Security checklist complete.
 |---|
 | Train baselines B1–B6 ([`07-training-playbook.md`](./07-training-playbook.md) §7) |
 | Ablations A1–A7, 3 seeds each |
-| Full VVX-Eval with all slices |
+| Full AMI-Eval with all slices |
 | **Listening test** — ≥ 15 participants |
 | Degradation curves, calibration diagrams |
 | Draft the report including the limitations section |
@@ -300,11 +301,11 @@ Where the tracks meet.
 |---|---|---|---|
 | M1 | 3 | Baseline pipeline + frozen contract | The problem is real and measured |
 | M2 | 4 | App skeleton on mock pipeline | Tracks decoupled |
-| M3 | 6 | VVX recorded | Longest-lead item de-risked |
+| M3 | 6 | AMI-Eval built | In-domain evaluation set ready |
 | M4 | 7 | **Sync engine proven** | Highest app risk retired |
 | M5 | 10 | Audio-only TSE ≥ 13 dB | Model works |
 | M6 | 12 | AV conditioning beats audio-only | Core novelty validated |
-| M7 | 14 | Meets NFR-ML floors on VVX | Product-grade quality |
+| M7 | 14 | Meets NFR-ML floors on AMI-Eval | Product-grade quality |
 | M8 | 16 | Full app on mock | Application complete |
 | M9 | 19 | Ablations complete | Research complete |
 | M10 | 21 | Real end-to-end | Integrated |
@@ -325,7 +326,7 @@ packaging · **manifest schema v1.0** · baseline report
 **Phase 2** — auth · schema+migrations · presigned upload · Celery+SSE · **mock worker** ·
 Next.js shell · generated client · test harness
 
-**Phase 3** — LibriMix gen · VoxCeleb2 ROIs · AMI · simulator · **VVX ethics** · **VVX recording** ·
+**Phase 3** — LibriMix gen · VoxCeleb2 ROIs · **AMI-Eval build** · simulator ·
 splits · eval harness
 
 **Phase 4** — TF-GridNet · FiLM · losses · **C0 smoke** · C1 · visual frontend · reliability gates ·
@@ -370,7 +371,7 @@ Off the critical path: the entire application. That is the point of the parallel
 |---|---|
 | C1 misses 13 dB by week 10 | Initialise from a published TSE checkpoint (WeSep/SpeakerBeam) instead of training from scratch. Costs some novelty framing, saves 3 weeks. |
 | Visual conditioning shows no gain | Debug ROI/audio alignment **first** — it is nearly always the cause. If genuinely no gain, ship audio-only TSE; Novelties 1, 3, 4, 5 remain intact. |
-| VVX recording slips | Fall back to AMI headset channels for evaluation. Weaker but publishable. Note the substitution in the report. |
+| ~~VVX recording slips~~ | **Realised and executed** — AMI headset channels are the evaluation basis (ADR-0015). The substitution is noted in the report. |
 | LRS3 agreement denied | VoxCeleb2 + AVSpeech only. Already the plan for the production checkpoint ([ADR-0013](./adr/0013-dataset-licensing.md)). |
 | GPU budget exhausted | Rent cloud GPUs for the ablation sweep only — it parallelises and is the bulk of the cost. |
 | Restoration (S6) doesn't work | Feature-flag off. Ship Faithful-only. Drop Novelty 4; report the negative result honestly — a documented failed hypothesis is a legitimate result. |
