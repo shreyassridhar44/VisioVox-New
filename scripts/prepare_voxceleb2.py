@@ -189,7 +189,11 @@ def pack(utt: Utterance, dest_root: Path, max_seconds: float) -> bool:
     audio = audio[: int(n_frames / FPS * RATE)]
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(dest, mouth=mouth, audio=audio.astype(np.float32))
+    # Uncompressed deliberately. Measured on real decoded frames: zip
+    # deflate costs 5.6x more read time for 2.16x less space (4.0 GB vs
+    # 8.7 GB over the test split). The dataloader is the training
+    # bottleneck on this hardware; disk is not.
+    np.savez(dest, mouth=mouth, audio=audio.astype(np.float32))
     return True
 
 

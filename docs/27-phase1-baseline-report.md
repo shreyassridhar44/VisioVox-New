@@ -177,7 +177,40 @@ Audio-only work is unaffected, as is everything in §2 and §3 above, none of wh
 
 ---
 
-## 7. Reproducing
+## 7. Dataloader throughput (Phase 3 exit criterion)
+
+The gate is "dataloaders produce correct batches at >= 85% GPU utilisation". Measured on the A5000
+with synthetic packed clips of the real shape and dtype, 6 workers, batch 8, 4 s chunks:
+
+| | |
+|---|---|
+| Loader ceiling | **295 items/s** (37 batches/s) |
+| Implied limit | feeds any training step slower than **27 ms/batch** |
+| GPU utilisation, realistic model | **97.5%** over 553 samples — **PASS** |
+
+Batch shapes are aligned by construction: `mixture (8, 64000)` at 16 kHz against
+`mouth (8, 1, 100, 96, 96)` at 25 fps, both exactly 4 s.
+
+**Two measurement mistakes worth recording, because both produced a confident wrong answer.**
+
+The first run reported 75.5% and FAIL. It sampled utilisation four times across a 1.1 s run — not a
+measurement, a coincidence. Long runs now sample in the hundreds.
+
+The second was the stand-in model. Four conv layers complete a batch in 19 ms and demand 428 items/s,
+which no loader can supply and no real separation network resembles. Benchmarking against it reported
+a dataloader bottleneck that does not exist. With a realistically sized stand-in the same loader
+holds the GPU at 97.5%.
+
+**And a fix that mostly was not one.** Packed clips were stored `savez_compressed`. On real decoded
+frames, uncompressed reads measured 5.6x faster for 2.16x the space (4.0 GB vs 8.7 GB over the test
+split), so the change looked compelling. End to end it bought about 6% — 278 to 295 items/s.
+Decompression was never the constraint; the mixing simulation and worker IPC are. The change is kept
+because the space is cheap and the gain is real, but the isolated microbenchmark overstated it by
+roughly ninety times, which is a good argument for always measuring the whole path.
+
+---
+
+## 8. Reproducing
 
 ```bash
 uv run python scripts/fetch_testvideos.py          # build clips from AMI
@@ -190,7 +223,7 @@ failure is audible, not only tabulated — the speaker swap is obvious on the na
 
 ---
 
-## 8. Measurement bugs found and fixed
+## 9. Measurement bugs found and fixed
 
 Recorded because each produced plausible numbers, and three of them favoured the wrong conclusion.
 
