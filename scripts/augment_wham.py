@@ -28,7 +28,11 @@ import numpy as np
 import soundfile as sf
 import soxr
 
-SPEEDS = (0.9, 1.1)
+# 0.8 and 1.2, not 0.9 and 1.1. These are not free parameters: the LibriMix
+# metadata references the resulting filenames (sp08, sp12) directly, so a
+# different choice generates files nothing will ever open. Taken from
+# upstream augment_train_noise.py rather than guessed.
+SPEEDS = (0.8, 1.2)
 EXPECTED_ORIGINALS = 20_000
 EXPECTED_TOTAL = 60_000
 
@@ -66,6 +70,12 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--wham-dir", type=Path, required=True)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument(
+        "--metadata",
+        type=Path,
+        default=Path.home() / "src" / "LibriMix" / "metadata" / "Libri2Mix",
+        help="checked so the generated filenames match what LibriMix expects",
+    )
     args = ap.parse_args(argv)
 
     train_dir = args.wham_dir / "tr"
@@ -86,6 +96,21 @@ def main(argv: list[str]) -> int:
         # Not fatal: the count differs between WHAM! releases, and refusing
         # here would block on a cosmetic mismatch.
         print(f"note: {len(originals)} originals, expected {EXPECTED_ORIGINALS}")
+
+    # Verify the naming contract BEFORE doing 40,000 files of work. The
+    # speeds determine the filenames, and LibriMix's metadata references those
+    # names directly — a wrong speed produces a corpus nothing will ever open,
+    # and the failure only surfaces much later inside generation.
+    if args.metadata.is_dir():
+        expected = {f"sp{str(s).replace('.', '')}" for s in SPEEDS}
+        blob = "".join(
+            f.read_text(errors="ignore")[:200_000] for f in sorted(args.metadata.glob("*.csv"))[:2]
+        )
+        missing = {tag for tag in expected if tag not in blob}
+        if missing:
+            print(f"ABORT: metadata never references {sorted(missing)} — wrong speeds")
+            return 2
+        print(f"naming contract ok: metadata references {sorted(expected)}")
 
     print(f"augmenting {len(originals)} files at speeds {SPEEDS} ...", flush=True)
     created = 0

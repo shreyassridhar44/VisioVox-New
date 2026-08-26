@@ -47,7 +47,13 @@ done
 # The binding constraint is the HOST volume, not the ext4 filesystem: a WSL2
 # vhdx is sparse and df inside the distro reports its virtual maximum (~1 TB)
 # regardless of how little room the Windows drive actually has.
-NEED_GB="${NEED_GB:-260}"
+# Measured, not estimated. This build is ONE config (16k / min / mix_both),
+# which docs/25 §6 chose specifically to keep the footprint small. Observed:
+# train-100 is 19 GB for 13,900 rows, so train-360 at 50,800 rows is ~69 GB,
+# and test plus dev add ~4 GB — about 92 GB in total. The previous 260 GB came
+# from a full multi-config build and aborted a run that had 232 GB free and
+# needed a third of it.
+NEED_GB="${NEED_GB:-110}"
 HOST_MOUNT="${HOST_MOUNT:-/mnt/d}"   # volume holding the distro vhdx
 
 avail_gb() { df -BG --output=avail "$1" 2>/dev/null | tail -1 | tr -dc '0-9'; }
@@ -113,6 +119,36 @@ else
   log "noise augmentation already done"
 fi
 
+# ---- clear partial splits -------------------------------------------------
+# LibriMix skips a split whose output directory already exists, without
+# checking whether it is complete. An interrupted run therefore leaves a
+# directory with a handful of files that every later run treats as done, and
+# the pipeline reports success on a third of a corpus. Each split is checked
+# against its metadata row count (four files per row: mix, s1, s2, noise) and
+# an incomplete one is removed so it regenerates.
+MIXDIR="$OUTDIR/Libri2Mix/wav16k/min"
+if [ -d "$MIXDIR" ]; then
+  for csv in "$LIBRIMIX_SRC"/metadata/Libri2Mix/libri2mix_*.csv; do
+    case "$csv" in *_info.csv) continue;; esac
+    name=$(basename "$csv" .csv); name=${name#libri2mix_}
+    case "$name" in
+      dev-clean) split=dev;; test-clean) split=test;;
+      train-clean-100) split=train-100;; train-clean-360) split=train-360;;
+      *) continue;;
+    esac
+    d="$MIXDIR/$split"
+    [ -d "$d" ] || continue
+    want=$(( ( $(wc -l < "$csv") - 1 ) * 4 ))
+    have=$(find "$d" -name '*.wav' 2>/dev/null | wc -l)
+    if [ "$have" -lt "$want" ]; then
+      log "split $split is $have/$want files — removing so it regenerates"
+      rm -rf "$d"
+    else
+      log "split $split complete ($have files)"
+    fi
+  done
+fi
+
 # ---- generate -------------------------------------------------------------
 log "generating Libri2Mix — 16k / min / mix_both"
 "${PYBIN[@]}" "$LIBRIMIX_SRC/scripts/create_librimix_from_metadata.py" \
@@ -123,6 +159,10 @@ log "generating Libri2Mix — 16k / min / mix_both"
   --n_src 2 \
   --freqs 16k \
   --modes min \
-  --types mix_both
+  --types mix_both >> "$LOG" 2>&1
+# Redirected explicitly. Without it the generator writes tqdm progress to the
+# inherited stderr; when that is a tmux pane and the server exits, the next
+# write is a broken pipe and the process dies about thirty seconds in. It
+# looked like the generator failing, and was actually it losing its terminal.
 
 log "=== done; output $(du -sh "$OUTDIR" | cut -f1); free: $(df -h "$OUTDIR" | awk 'NR==2{print $4}') ==="
