@@ -23,9 +23,19 @@ smoke test all run. No application or pipeline code yet — that is Phase 1/2.
 the distro (not Docker Desktop). Full record and reasoning in
 [`docs/26-workstation-as-built.md`](./docs/26-workstation-as-built.md).
 
-**Phase 1 started:** artifact manifest v1.0 is frozen
-(`packages/contracts/schemas/manifest.schema.json`) with 13 contract tests. This is the gate that
-lets the application track proceed against a stable interface while the model is still being built.
+**Phase 1 in progress — the starred exit criterion is met.** ADR-0001 has been tested empirically
+and holds: permutation-error rate is **29.8%** pooled over three AMI meetings (three sites,
+full-length, 1123 scored windows). Naive stitching lands **10.7 dB below returning the mixture
+untouched**; the same separator output with oracle assignment and gain alignment lands **+2.55 dB
+above** it. The separator is not the bottleneck — stitching is. Full write-up in
+[`docs/27-phase1-baseline-report.md`](./docs/27-phase1-baseline-report.md).
+
+Artifact manifest v1.0 is frozen (`packages/contracts/schemas/manifest.schema.json`, 13 contract
+tests), which unblocks the application track (Phase 2) against a stable interface.
+
+Phase 1 done: manifest · S0 ingest · S5 windowed separation · permutation harness · AMI test set ·
+baseline report. Phase 1 remaining: S2A diarization (blocked on the HF token), S2B video analysis,
+S3 fusion, S7 WhisperX, S9 packaging.
 
 **Phase 0 exit evidence:** `make check` green (ruff, mypy strict, eslint, tsc, pytest); `make dev`
 brings up Postgres, Redis, MinIO and mail with every service answering; `make smoke` reports
@@ -176,6 +186,21 @@ the whole structure, which is why the contract check is a blocking CI gate.
 ## Lessons
 
 _Append as they happen. Include what was expected, what happened, and what changed as a result._
+
+- *(2026-08-26)* **Correct per-window identity is not enough to stitch blind separation.** F1.1
+  predicts permutation drift, and that is real (29.8%). But a separator also gives no guarantee
+  that the same speaker emerges at the same *scale or polarity* from two independent calls, and
+  SI-SDR is scale invariant so the matching never notices. Overlap-add does — adjacent windows
+  cancel where they overlap. The tell was an oracle scoring *worse* than naive, which is impossible
+  for an upper bound. Correcting scale was worth most of a 13.25 dB gap. When a bound is violated,
+  the bound is usually the bug.
+
+- *(2026-08-26)* **Three of the five measurement bugs in Phase 1 produced plausible numbers that
+  favoured the wrong conclusion**, and none of them threw. A per-track VAD counted headset bleed as
+  speech and reported 79.7% overlap where the truth was 5.6%; an absolute dB floor made a meeting
+  recorded 30 dB hotter score every window as overlapped; a truncated download was accepted because
+  the check was "larger than 100 KB". The habit that caught all three was checking whether a number
+  was *plausible for the physical situation*, not whether the code ran.
 
 - *(2026-08-26)* **"HuggingFace is blocked" was wrong, and the doc's remedy would have been
   wrong too.** `docs/25` §1b maps a failed reachability check to "download weights elsewhere, set
