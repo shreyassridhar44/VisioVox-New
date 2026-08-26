@@ -39,7 +39,9 @@ class Settings(BaseSettings):
     api_internal_url: str = "http://localhost:8000"
 
     # --- auth ---
-    auth_secret: SecretStr = SecretStr("dev-only-change-me")
+    # RFC 7518 3.2 wants >= 32 bytes for HS256. The default is dev-only and
+    # long enough not to warn; production must override it.
+    auth_secret: SecretStr = SecretStr("dev-only-insecure-secret-replace-in-every-real-deployment")
     access_token_ttl_seconds: int = 600
     refresh_token_ttl_days: int = 30
 

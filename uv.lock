@@ -3268,6 +3268,7 @@ ml = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "jsonschema" },
     { name = "mypy" },
     { name = "pre-commit" },
@@ -3305,6 +3306,7 @@ provides-extras = ["ml"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pre-commit", specifier = ">=4.6.2" },
