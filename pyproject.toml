@@ -101,6 +101,9 @@ ignore = [
 "tests/**" = ["S", "T20"]
 "**/tests/**" = ["S", "T20"]
 "scripts/**" = ["T20"]
+# S311: training-data simulation needs reproducible pseudo-randomness, not
+# cryptographic randomness. A CSPRNG here would make runs unreproducible.
+"ml/training/**" = ["S311"]
 "ml/**" = ["T20"]
 
 [tool.ruff.format]
