@@ -20,6 +20,7 @@ Usage:  uv run python scripts/fetch_testvideos.py
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,25 @@ MEETINGS = [
 ]
 
 
+def remote_size(url: str) -> int | None:
+    """Content-Length from a HEAD request, so truncation is detectable."""
+    curl = shutil.which("curl")
+    if curl is None:
+        return None
+    proc = subprocess.run(  # noqa: S603 - resolved path, fixed argv
+        [curl, "-sIL", "--max-time", "30", url],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    size: int | None = None
+    for line in proc.stdout.splitlines():
+        if line.lower().startswith("content-length:"):
+            with contextlib.suppress(ValueError):
+                size = int(line.split(":", 1)[1].strip())
+    return size
+
+
 def fetch(url: str, dest: Path) -> bool:
     """Download unless already present and non-trivial (404 pages are tiny).
 
@@ -63,9 +83,11 @@ def fetch(url: str, dest: Path) -> bool:
     and urlretrieve has no timeout, so a stall hangs the run indefinitely
     instead of failing. -c also resumes a partial file rather than restarting.
     """
-    if dest.exists() and dest.stat().st_size > MIN_BYTES:
-        print(f"    have {dest.name}")
-        return True
+    # Deliberately NOT "exists and non-trivial => done". A stalled transfer
+    # leaves a large but truncated file, which that test happily accepts; one
+    # headset came through at 14 MB of 40 MB and silently cut the measurement
+    # to a third of the meeting. wget -c is a cheap no-op when the file is
+    # already complete, and resumes when it is not, so always run it.
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"    get  {dest.name}", flush=True)
     wget = shutil.which("wget")
@@ -89,12 +111,18 @@ def fetch(url: str, dest: Path) -> bool:
         capture_output=True,
         text=True,
     )
-    if proc.returncode != 0 or not dest.exists() or dest.stat().st_size <= MIN_BYTES:
-        size = dest.stat().st_size if dest.exists() else 0
+    size = dest.stat().st_size if dest.exists() else 0
+    if proc.returncode != 0 or size <= MIN_BYTES:
         print(f"    FAIL {dest.name}: rc={proc.returncode}, {size} bytes")
         if size <= MIN_BYTES:
-            dest.unlink(missing_ok=True)
+            dest.unlink(missing_ok=True)  # 404 page, not a partial download
         return False
+
+    expected = remote_size(url)
+    if expected is not None and size != expected:
+        print(f"    FAIL {dest.name}: {size} bytes, expected {expected} (truncated)")
+        return False
+    print(f"    ok   {dest.name} ({size} bytes)")
     return True
 
 
