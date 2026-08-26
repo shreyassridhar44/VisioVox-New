@@ -210,7 +210,32 @@ roughly ninety times, which is a good argument for always measuring the whole pa
 
 ---
 
-## 8. Reproducing
+## 8. Harness validation against published SepFormer (Phase 3 exit criterion)
+
+The gate is that the harness reproduces published SepFormer numbers on Libri2Mix within about 1 dB.
+This validates the *harness*, not the model: if our measurement of a known system matches the
+literature, numbers this harness produces for our own systems can be compared against it. If it did
+not match, every later number would be suspect and nothing would say so.
+
+| | |
+|---|---|
+| System | `speechbrain/sepformer-libri2mix` |
+| Condition | Libri2Mix test / 8 kHz / min / **mix_clean**, all 3000 items |
+| Published | 20.60 dB SI-SNRi |
+| **Measured** | **20.58 dB SI-SDRi**, 95% CI [20.48, 20.67] |
+| Difference | **−0.02 dB** |
+
+**Matched conditions were the work.** The published figure is 8 kHz `mix_clean`; our training corpus
+is 16 kHz `mix_both`. Running the model on the corpus we happened to have would have produced a
+materially different number for entirely legitimate reasons, and it would have read as a harness
+failure. The 8 kHz clean test split was generated specifically for this comparison.
+
+Scoring is permutation-free, as the literature does it: a separation model has no notion of which
+output is which speaker, so a fixed ordering would measure ordering luck rather than separation.
+
+---
+
+## 9. Reproducing
 
 ```bash
 uv run python scripts/fetch_testvideos.py          # build clips from AMI
@@ -223,7 +248,7 @@ failure is audible, not only tabulated — the speaker swap is obvious on the na
 
 ---
 
-## 9. Measurement bugs found and fixed
+## 10. Measurement bugs found and fixed
 
 Recorded because each produced plausible numbers, and three of them favoured the wrong conclusion.
 
