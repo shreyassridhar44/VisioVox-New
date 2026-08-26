@@ -121,7 +121,8 @@ exclude = ['ml/notebooks/', '\.venv/']
 [[tool.mypy.overrides]]
 module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
           "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
-          "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*"]
+          "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*",
+          "pyloudnorm.*", "insightface.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------------
