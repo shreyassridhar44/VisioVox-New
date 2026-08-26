@@ -29,6 +29,7 @@ import numpy as np
 import soundfile as sf
 
 from .s7_transcribe import Transcript
+from .s9_hls import choose_engine, package_hls
 from .types import (
     ANALYSIS_SAMPLE_RATE,
     Modality,
@@ -238,9 +239,9 @@ def package(
         "duration_ms": duration_ms,
         "has_video": has_video,
         "speakers": speakers,
-        # Web Audio is the default engine; HLS is chosen by the API for long or
-        # heavy projects (docs/12 §2). Phase 1 always emits the direct engine.
-        "playback_hint": "webaudio",
+        # docs/12 §2: the engine decision is made here, server-side, so the
+        # duration and track-count thresholds are not duplicated in the client.
+        "playback_hint": choose_engine(duration_ms, len(speakers)),
         "warnings": list(result.warnings),
         "signed_until": signed_until,
     }
@@ -253,6 +254,23 @@ def package(
     if overlap_ratio is not None:
         manifest["overlap_ratio"] = round(overlap_ratio, 4)
         manifest["difficulty"] = _difficulty(overlap_ratio, len(tracks))
+
+    if manifest["playback_hint"] == "hls":
+        try:
+            hls = package_hls(
+                out_dir,
+                tracks=[(t.label, out_dir / f"spk_{t.ordinal}_f.m4a") for t in tracks],
+                captions=[(t.label, f"spk_{t.ordinal}.vtt") for t in tracks],
+                duration_ms=duration_ms,
+            )
+            manifest["hls"] = {"master": f"{base_url}{hls.master.name}"}
+        except Exception as exc:
+            # A failed HLS build should not lose the project: Web Audio still
+            # works, it just costs more memory on a long recording.
+            result.status = StageStatus.DEGRADED
+            result.warn("hls_packaging_failed")
+            manifest["playback_hint"] = "webaudio"
+            result.detail = f"{type(exc).__name__}: {exc}"
 
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
