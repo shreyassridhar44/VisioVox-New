@@ -124,7 +124,7 @@ exclude = ['ml/notebooks/', '\.venv/']
 module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
           "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
           "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*",
-          "pyloudnorm.*", "insightface.*"]
+          "pyloudnorm.*", "insightface.*", "aioboto3.*", "botocore.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------------
