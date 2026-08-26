@@ -120,11 +120,18 @@ pretty = true
 exclude = ['ml/notebooks/', '\.venv/']
 
 # Third-party ML libraries ship no stubs; do not let that weaken our own code.
+# Celery ships no type stubs, so @celery_app.task reads as an untyped decorator
+# under strict mode. Scoped to the task module rather than relaxed globally.
+[[tool.mypy.overrides]]
+module = ["worker_cpu.tasks"]
+disallow_untyped_decorators = false
+
 [[tool.mypy.overrides]]
 module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
           "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
           "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*",
-          "pyloudnorm.*", "insightface.*", "aioboto3.*", "botocore.*"]
+          "pyloudnorm.*", "insightface.*", "aioboto3.*", "botocore.*",
+          "celery.*", "sse_starlette.*"]
 ignore_missing_imports = true
 
 # ----------------------------------------------------------------------------

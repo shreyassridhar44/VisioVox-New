@@ -21,6 +21,7 @@ from .config import get_settings
 from .db import dispose_engine
 from .deps import CurrentUser, OwnedProject, SessionDep, SettingsDep
 from .models import Job, JobStage, Project
+from .routes_media import router as media_router
 from .schemas import (
     CreateProjectRequest,
     ErrorResponse,
@@ -281,3 +282,4 @@ async def get_job(project: OwnedProject, session: SessionDep) -> JobResponse:
 app.include_router(health)
 app.include_router(auth)
 app.include_router(projects)
+app.include_router(media_router)
