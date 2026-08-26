@@ -14,6 +14,10 @@ set -euo pipefail
 STORAGE="${STORAGE:-$HOME/data/corpora}"
 OUTDIR="${OUTDIR:-$HOME/data/Libri2Mix}"
 LIBRIMIX_SRC="${LIBRIMIX_SRC:-$HOME/src/LibriMix}"
+# Run through uv so the generator sees numpy/soundfile/pandas from the
+# project venv rather than a bare system interpreter that lacks them.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYBIN=(uv run --project "$REPO_DIR" python)
 LOG="${LOG:-$HOME/logs/librimix-generate.log}"
 KEEP_ARCHIVES="${KEEP_ARCHIVES:-0}"
 
@@ -22,7 +26,11 @@ log() { echo "[$(date -Is)] $*" | tee -a "$LOG"; }
 
 require() {
   local f="$STORAGE/$1"
-  [ -s "$f" ] || { log "MISSING $f — run scripts/fetch-librimix.sh first"; exit 1; }
+  # An archive is only required if its extracted form is absent. This step
+  # deletes archives after extracting them, so demanding them on every run
+  # made the script refuse to proceed with data already on disk.
+  [ -s "$f" ] || [ -d "$STORAGE/LibriSpeech" ] || {
+    log "MISSING $f — run scripts/fetch-librimix.sh first"; exit 1; }
 }
 
 log "=== generation begin ==="
@@ -83,13 +91,23 @@ if [ "$KEEP_ARCHIVES" != "1" ]; then
         "$STORAGE/wham_noise.zip"
 fi
 
+# ---- LibriMix tooling -----------------------------------------------------
+# The generator scripts and the metadata live in the LibriMix repository. The
+# earlier version assumed the tree already existed, so an unattended run got as
+# far as extracting 40 GB and then failed on a missing path.
+if [ ! -d "$LIBRIMIX_SRC/scripts" ]; then
+  log "cloning LibriMix tooling into $LIBRIMIX_SRC"
+  mkdir -p "$(dirname "$LIBRIMIX_SRC")"
+  git clone --depth 1 https://github.com/JorisCos/LibriMix.git "$LIBRIMIX_SRC"     >> "$LOG" 2>&1 || { log "clone FAILED"; exit 1; }
+fi
+
 # ---- augment noise --------------------------------------------------------
 # Creates the high-frequency-extended noise the 16k config needs. Idempotent
 # in effect, but slow, so it is stamped.
 STAMP="$STORAGE/.wham_augmented"
 if [ ! -f "$STAMP" ]; then
   log "augmenting WHAM! noise for 16 kHz"
-  python "$LIBRIMIX_SRC/scripts/augment_train_noise.py" --wham_dir "$STORAGE/wham_noise"
+  "${PYBIN[@]}" "$REPO_DIR/scripts/augment_wham.py" --wham-dir "$STORAGE/wham_noise"
   touch "$STAMP"
 else
   log "noise augmentation already done"
@@ -97,7 +115,7 @@ fi
 
 # ---- generate -------------------------------------------------------------
 log "generating Libri2Mix — 16k / min / mix_both"
-python "$LIBRIMIX_SRC/scripts/create_librimix_from_metadata.py" \
+"${PYBIN[@]}" "$LIBRIMIX_SRC/scripts/create_librimix_from_metadata.py" \
   --librispeech_dir "$STORAGE/LibriSpeech" \
   --wham_dir "$STORAGE/wham_noise" \
   --metadata_dir "$LIBRIMIX_SRC/metadata/Libri2Mix" \

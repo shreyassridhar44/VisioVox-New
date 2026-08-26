@@ -139,7 +139,7 @@ module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
           "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
           "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*",
           "pyloudnorm.*", "insightface.*", "torchmetrics.*", "fast_bss_eval.*", "pandas.*",
-          "pesq.*", "pystoi.*", "pyroomacoustics.*", "aioboto3.*", "botocore.*",
+          "pesq.*", "pystoi.*", "pyroomacoustics.*", "soxr.*", "aioboto3.*", "botocore.*",
           "celery.*", "sse_starlette.*",
           "defusedxml.*"]
 ignore_missing_imports = true

@@ -17,8 +17,11 @@ check() {
   fi
 }
 D="$HOME/data"
-check "$D/corpora/train-clean-360.tar.gz" 23000000000 "LibriSpeech 360"
-check "$D/corpora/wham_noise.zip"         17800000000 "WHAM! noise"
+# The generator extracts the archives and then deletes them, so after that
+# point the extracted trees are the artefact and the archives are correctly
+# absent. Checking for archives reported healthy data as missing.
+check "$D/corpora/LibriSpeech"            ""          "LibriSpeech (extracted)"
+check "$D/corpora/wham_noise"             ""          "WHAM! (extracted)"
 check "$D/librimix"                       ""          "LibriMix (generated)"
 check "$D/voxceleb2/vox2_test_aac.zip"     2500000000 "VoxCeleb2 audio"
 check "$D/voxceleb2/vox2_test_mp4.zip"     8300000000 "VoxCeleb2 video"
