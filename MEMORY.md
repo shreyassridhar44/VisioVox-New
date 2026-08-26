@@ -33,9 +33,18 @@ above** it. The separator is not the bottleneck — stitching is. Full write-up 
 Artifact manifest v1.0 is frozen (`packages/contracts/schemas/manifest.schema.json`, 13 contract
 tests), which unblocks the application track (Phase 2) against a stable interface.
 
-Phase 1 done: manifest · S0 ingest · S5 windowed separation · permutation harness · AMI test set ·
-baseline report. Phase 1 remaining: S2A diarization (blocked on the HF token), S2B video analysis,
-S3 fusion, S7 WhisperX, S9 packaging.
+**Phase 1 complete** (2026-08-26). All nine tasks and all three exit criteria:
+S0 ingest · S2A diarization+overlap · S2B SCRFD+ByteTrack · S3 fusion · S5 separation ·
+S7 transcription · S9 packaging · manifest v1.0 frozen · 3 AMI test videos.
+`uv run python scripts/run_pipeline.py` produces a **schema-valid manifest on 3/3 clips**.
+
+ADR-0010 routing is implemented and measured: **93–97% of the AMI timeline is single-talker** and
+passes through untouched. That is the concrete explanation for the un-routed Tier 0 number coming
+out 10.7 dB below doing nothing — the separator was being run over audio that never needed it.
+
+**Phase 2 in progress:** Postgres schema + Alembic migrations applied and verified. Remaining:
+auth, presigned upload, Celery job state machine + SSE, mock pipeline worker, generated TS client,
+Next.js pages.
 
 **Phase 0 exit evidence:** `make check` green (ruff, mypy strict, eslint, tsc, pytest); `make dev`
 brings up Postgres, Redis, MinIO and mail with every service answering; `make smoke` reports
