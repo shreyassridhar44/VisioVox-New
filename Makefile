@@ -62,6 +62,16 @@ eval-quick:  ## 30-item ML eval; gates on regression
 
 check: lint typecheck test contracts-check  ## Everything CI runs
 
+datasets:  ## Resume dataset acquisition and generation in the background
+	@# setsid, not tmux: a dead tmux server once killed three multi-hour
+	@# downloads at once. Both scripts resume, so re-running this is safe.
+	@setsid nohup bash scripts/dataset-pipeline.sh > /dev/null 2>&1 < /dev/null &
+	@setsid nohup bash scripts/voxceleb2-pipeline.sh > /dev/null 2>&1 < /dev/null &
+	@echo "started; follow with: tail -f ~/logs/dataset-pipeline.log ~/logs/voxceleb2-pipeline.log"
+
+datasets-status:  ## Show dataset acquisition progress
+	@bash scripts/dataset-status.sh
+
 web-build:  ## Production build of the Next.js app (also typechecks and lints it)
 	$(PNPM) --filter @visiovox/web run build
 
