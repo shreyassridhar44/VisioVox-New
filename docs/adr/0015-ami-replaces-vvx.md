@@ -104,6 +104,21 @@ Four things are genuinely lost, and none should be papered over in the report:
 number is reported on VVX-Eval. Both must now read AMI-Eval, with the domain caveat attached at the
 point of claim rather than in a footnote.
 
+### The quality floors need re-checking, not silently reinterpreting
+
+`01-requirements.md` §2.1 sets NFR-ML-01 at ≥ 14 dB SI-SDRi and NFR-ML-05 at ≤ 15% target-speaker
+WER. Those numbers were chosen against purpose-recorded data: controlled acoustics, modern
+microphones, chosen speaker pairings.
+
+AMI is plausibly harder — 2004–2006 recordings, real meeting-room reverberation, and no control over
+who sits next to whom. The same figure therefore does not mean the same thing on AMI as it would
+have on VVX.
+
+**These targets are a commitment and are not being changed here.** They are flagged so they get
+re-examined against the Phase 1 baseline once Tier 1 training produces a real number, rather than
+being quietly reinterpreted when they turn out to be hard to hit. If they need to move, that is a
+separate decision with its own record.
+
 ### Revisit if
 
 Participants become available. Even 10 sessions would allow a genuine in-domain check against the
