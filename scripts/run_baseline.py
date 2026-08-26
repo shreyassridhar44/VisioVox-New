@@ -58,8 +58,11 @@ class ClipResult:
     permutation_flips: int
     windows_scored: int
     windows_skipped_silent: int
+    si_sdr_mixture_db: float
     si_sdr_naive_db: float
     si_sdr_oracle_db: float
+    si_sdri_naive_db: float
+    si_sdri_oracle_db: float
     si_sdr_gap_db: float
     seconds_elapsed: float
     verdict: str
@@ -139,6 +142,12 @@ def run_clip(clip_dir: Path, model: Separator) -> ClipResult | None:
 
     naive_db = score_tracks(naive, references)
     oracle_db = score_tracks(oracle, references)
+    # SI-SDRi is improvement over doing nothing: feeding the mixture itself
+    # as every estimate. Absolute SI-SDR is not comparable across clips
+    # because it depends on how much of the mixture each speaker occupies,
+    # and docs/25 section 4 states the Tier 0 expectation as SI-SDRi.
+    mixture_tracks = np.tile(mixture[None, :], (naive.shape[0], 1))
+    mixture_db = score_tracks(mixture_tracks, references)
 
     out = clip_dir / "baseline"
     out.mkdir(exist_ok=True)
@@ -155,8 +164,11 @@ def run_clip(clip_dir: Path, model: Separator) -> ClipResult | None:
         permutation_flips=report.n_flips,
         windows_scored=report.n_scored,
         windows_skipped_silent=report.skipped_silent,
+        si_sdr_mixture_db=round(mixture_db, 2),
         si_sdr_naive_db=round(naive_db, 2),
         si_sdr_oracle_db=round(oracle_db, 2),
+        si_sdri_naive_db=round(naive_db - mixture_db, 2),
+        si_sdri_oracle_db=round(oracle_db - mixture_db, 2),
         si_sdr_gap_db=round(oracle_db - naive_db, 2),
         seconds_elapsed=round(time.perf_counter() - t0, 1),
         verdict=report.verdict(),
@@ -185,8 +197,13 @@ def main() -> int:
         results.append(r)
         print(f"  windows            {r.n_windows} ({r.windows_scored} scored)")
         print(f"  permutation error  {r.permutation_error_rate:.1%} ({r.permutation_flips} flips)")
-        print(f"  SI-SDR naive       {r.si_sdr_naive_db:6.2f} dB")
-        print(f"  SI-SDR oracle      {r.si_sdr_oracle_db:6.2f} dB")
+        print(f"  SI-SDR mixture     {r.si_sdr_mixture_db:6.2f} dB  (do nothing)")
+        print(
+            f"  SI-SDR naive       {r.si_sdr_naive_db:6.2f} dB  -> SI-SDRi {r.si_sdri_naive_db:+.2f}"
+        )
+        print(
+            f"  SI-SDR oracle      {r.si_sdr_oracle_db:6.2f} dB  -> SI-SDRi {r.si_sdri_oracle_db:+.2f}"
+        )
         print(f"  cost of ambiguity  {r.si_sdr_gap_db:6.2f} dB")
         print(f"  verdict            {r.verdict}")
 
