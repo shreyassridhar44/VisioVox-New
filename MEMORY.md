@@ -62,9 +62,10 @@ brings up Postgres, Redis, MinIO and mail with every service answering; `make sm
 2. **Dataset pipeline** — running unattended in tmux. `librimix` fetches; `dataset` waits for it
    and then generates Libri2Mix (16k / min / mix_both only). Logs in `~/logs/`. Both resumable.
    Generation aborts if the host volume has under 260 GB free.
-3. **Phase 3** — data. LibriMix generation is chained behind the download; VoxCeleb2 needs the
-   credentials the user has; VVX recording is the longest-lead item and should start now that
-   ethics is waived. Consent forms must be signed **before** recording, not after.
+3. **Phase 3** — data. LibriMix generation is chained behind the download. VoxCeleb2 needs the
+   credentials (key already in `.env.local`). **VVX will not be recorded** — AMI takes the
+   in-domain evaluation role, see [ADR-0015](./docs/adr/0015-ami-replaces-vvx.md). Build eval data
+   with `scripts/build_ami_eval.py`.
 4. **Reclaim `C:`** — `wsl --unregister Ubuntu` removes the superseded distro (~13.5 GB); `C:` is
    down to ~2 GB. The live distro is `VisioVox` at `D:\wsl\VisioVox`; a backup of the original
    sits at `F:\wsl-backup\ext4.vhdx.bak`.
@@ -72,6 +73,14 @@ brings up Postgres, Redis, MinIO and mail with every service answering; `make sm
    on `shreyassridhar44/VisioVox-New` (403). Resolve before the next push.
 
 ### Decisions taken outside the docs
+
+- **VVX will not be recorded** *(decided 2026-08-26)*. No participants are available. AMI replaces
+  it as the in-domain evaluation set ([ADR-0015](./docs/adr/0015-ami-replaces-vvx.md)): its headset
+  microphones give ground-truth per-speaker references, and its Closeup cameras give 100% face
+  coverage where the Corner view gave none. **Consequence that must stay visible: every headline
+  number is now a meeting-recording result** — seated participants, 352×288 table cameras — while
+  the product accepts arbitrary uploaded video. Label it at the point of claim, not in a footnote.
+  R-26 no longer applies; every dataset is re-downloadable.
 
 - **Ethics clearance waived** *(decided 2026-08-26)*. Proceeding without institutional review;
   VisioVox is a college project, and docs/21 §44 already notes coursework recording consenting
