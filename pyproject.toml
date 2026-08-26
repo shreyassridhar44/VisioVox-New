@@ -20,6 +20,7 @@ ml = [
   "nara-wpe>=0.0.10",
   "onnxruntime-gpu>=1.20",
   "opencv-python-headless>=4.10",
+  "insightface>=0.7.3",
   "huggingface-hub>=0.26",
   # LibriMix generation (scripts/generate_librimix.sh)
   "pandas>=2.2",
