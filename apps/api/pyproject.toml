@@ -3,7 +3,24 @@ name = "visiovox-api"
 version = "0.1.0"
 description = "VisioVox control plane (FastAPI)"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "sqlalchemy[asyncio]>=2.0.36",
+  "asyncpg>=0.30",
+  "alembic>=1.14",
+  "argon2-cffi>=23.1",
+  "pyjwt[crypto]>=2.10",
+  "python-ulid>=3.0",
+  "aioboto3>=13.2",
+  "celery[redis]>=5.4",
+  "redis>=5.2",
+  "sse-starlette>=2.1",
+  "python-multipart>=0.0.17",
+  "email-validator>=2.2",
+]
 
 [build-system]
 requires = ["hatchling"]

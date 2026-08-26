@@ -59,9 +59,12 @@ brings up Postgres, Redis, MinIO and mail with every service answering; `make sm
 
 ### Decisions taken outside the docs
 
-- **Ethics clearance is deferred.** It gates only Phase 3 (VVX recording), not Phases 0–2. Check with
-  the supervisor whether it is required at all before treating it as a six-week process. Written
-  participant consent is still mandatory whenever recording happens.
+- **Ethics clearance waived** *(decided 2026-08-26)*. Proceeding without institutional review;
+  VisioVox is a college project, and docs/21 §44 already notes coursework recording consenting
+  adults on non-sensitive topics is commonly exempt. VVX recording is therefore unblocked and no
+  longer has a six-week lead time. **Written participant consent remains mandatory** — that is a
+  separate requirement from institutional review, and ADR-0008 depends on it, so the consent form
+  stays in the VVX session checklist.
 - **Commit granularity:** one commit per completed unit of work; push at phase boundaries. Roughly
   5–15 commits per phase. Not per file, not per phase.
 - **Attribution:** commits are authored solely by the repository owner. No AI co-author trailers or
