@@ -782,6 +782,16 @@ wheels = [
 ]
 
 [[package]]
+name = "fast-bss-eval"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/df/9095cedbb89aa308c34b692f65fb9f4405c7fea735feeea8ce3148a66f43/fast_bss_eval-0.1.4.tar.gz", hash = "sha256:b9b1307577f77128dda9efb8310ff4d4ca39afc0fccce0c62640a1e34f9add13", size = 33694, upload-time = "2022-06-07T01:39:03.36Z" }
+
+[[package]]
 name = "fastapi"
 version = "0.141.1"
 source = { registry = "https://pypi.org/simple" }
@@ -884,6 +894,20 @@ wheels = [
 [package.optional-dependencies]
 http = [
     { name = "aiohttp" },
+]
+
+[[package]]
+name = "gammatone"
+version = "1.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/f8/64317ea26ee2931c3f3b6ec8417a1f99c268d01bc11f43079a469edfe453/gammatone-1.0.3.tar.gz", hash = "sha256:fc990f5e3ee5cd48bdfac215003e31aa5777d82360fd2914500667e62e3a2c16", size = 12947, upload-time = "2024-09-10T13:42:07.939Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/37/9beb1eec3e3a62e3da9128a83d78516f5d911009f5e3b7ebf6fea19f9ebc/Gammatone-1.0.3-py3-none-any.whl", hash = "sha256:410a07344bacac651c3d8d466e25888e1925f00458f054871485c0aa22d78061", size = 15023, upload-time = "2024-09-10T13:42:06.547Z" },
 ]
 
 [[package]]
@@ -2030,6 +2054,12 @@ wheels = [
 ]
 
 [[package]]
+name = "pesq"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/e6/f8bdcef3238ac10fb3ce37d150e9b03a152d971febd681f088c6e5e17d8e/pesq-0.0.4.tar.gz", hash = "sha256:b724b28f73fb638522982bd68e8c3c0957e2f45210639a460233b17aa7fc890b", size = 38702, upload-time = "2022-05-17T14:15:26.301Z" }
+
+[[package]]
 name = "pillow"
 version = "12.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2282,6 +2312,21 @@ wheels = [
 ]
 
 [[package]]
+name = "pyarrow"
+version = "25.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/e3/27f57f80141379d60defe6703eb50a707325706f07fedfd1312c7a751995/pyarrow-25.0.1.tar.gz", hash = "sha256:9150a83248bfed9813ea3c3af74c3856c1984d444aa28e58bf7733b9750ddf6a", size = 1201653, upload-time = "2026-08-10T12:40:53.904Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/e2/9ab15b88cbfac28e16419ce5439ec29234c5172cb8259301b4ba639bdec0/pyarrow-25.0.1-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:df961f2e7ae9cf496459259d798652c70625f6c080650d6952f8c04053c58ee9", size = 35861559, upload-time = "2026-08-10T12:38:02.567Z" },
+    { url = "https://files.pythonhosted.org/packages/58/79/a0036dbe1eabe1f73127427342f1d99982584c4a2cde2651d6c93499c6f6/pyarrow-25.0.1-cp312-cp312-macosx_12_0_x86_64.whl", hash = "sha256:cc4aa407fde9fc660be3939e49ea31f50f3e9fec17c0ec63159f7711edd3efc9", size = 37628383, upload-time = "2026-08-10T12:38:09.083Z" },
+    { url = "https://files.pythonhosted.org/packages/13/49/d93a57d375f4bf0cf82913dd6bb54acafde83dd993be2282c81ac5616cad/pyarrow-25.0.1-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:4340f0ba6c1d2e13f21658de1d7c662ca2545018568d0030a1e9afca159d87e3", size = 46820190, upload-time = "2026-08-10T12:38:15.458Z" },
+    { url = "https://files.pythonhosted.org/packages/60/c9/711ca85d79f1ec98f29a5eae2b051e25b4ecec5de3e3c0e2d5c5dcb15664/pyarrow-25.0.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:5389cdf79447ed1515c9e31620e6e1e2302249564d603f2ad727d4f6d313e4c3", size = 50102437, upload-time = "2026-08-10T12:38:22.487Z" },
+    { url = "https://files.pythonhosted.org/packages/80/53/8fb8359ff17cfb6263a1cf3ebf7caec9fe197de118719e84fcb1d0618026/pyarrow-25.0.1-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:d51592cb7561e87877c506113e7adbf1342ab579e6c21f0ef44b8ba41cb74c80", size = 49942424, upload-time = "2026-08-10T12:38:28.755Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/83/4e5ae02a9341571b18a6fca380ac7a58ce6ddae7ab3c060208c0a1e79f02/pyarrow-25.0.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:6109c94d8b9f3b17a041daca16cacb2f651ad8f1ef70a4232c2c0f37a23da2a8", size = 53144206, upload-time = "2026-08-10T12:38:34.862Z" },
+    { url = "https://files.pythonhosted.org/packages/65/ee/197cbf47e49f83e6ebeb946a5259a48a638dea27ac774db42fe78022179d/pyarrow-25.0.1-cp312-cp312-win_amd64.whl", hash = "sha256:8858d7bfc22e3f51529aeaa4077225029724623e4595dc9eff8c793935c34140", size = 27953934, upload-time = "2026-08-10T12:38:39.808Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2402,6 +2447,19 @@ dependencies = [
     { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f6/46/05d3b20d6512b73874623f6202f11d988ed6655ebccdb877eff8e25f8d2e/pysndfx-0.3.6.tar.gz", hash = "sha256:ce168812963e398e849ad60aa1dc74e78f452ce0c948679367b2627459f39c9c", size = 5857, upload-time = "2018-09-05T14:12:59.986Z" }
+
+[[package]]
+name = "pystoi"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bf/3d/1ae8bdb686c6aaaeef474aa6b790abbe38f42b61188b57a974dd9320e521/pystoi-0.4.1.tar.gz", hash = "sha256:1c6f50d6fbfee46b00c922458cdbd27228d9830ca81cea788fd600fc2f7de6e4", size = 10401, upload-time = "2023-12-29T16:48:05.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/22/60cd92bd3ec00948800984410f4cf5ded5bd8e9b715729f3642efe0edb3d/pystoi-0.4.1-py2.py3-none-any.whl", hash = "sha256:e277b671663d26d35a2416c9c8010a74084e6c3970354506398051a554896939", size = 8218, upload-time = "2023-12-29T16:48:03.748Z" },
+]
 
 [[package]]
 name = "pytest"
@@ -3113,6 +3171,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c3/a2/c7f6ebf546f8f644edf0f999aa98ece106986a77a7b922316bf6414ff825/torchmetrics-1.9.0-py3-none-any.whl", hash = "sha256:bfdcbff3dd1d96b3374bb2496eb39f23c4b28b8a845b6a18c313688e0d2d9ca1", size = 983384, upload-time = "2026-03-09T17:41:19.756Z" },
 ]
 
+[package.optional-dependencies]
+audio = [
+    { name = "gammatone" },
+    { name = "librosa" },
+    { name = "onnxruntime" },
+    { name = "pesq" },
+    { name = "pystoi" },
+    { name = "requests" },
+    { name = "torchaudio" },
+]
+
 [[package]]
 name = "tqdm"
 version = "4.70.0"
@@ -3275,6 +3344,7 @@ source = { virtual = "." }
 [package.optional-dependencies]
 ml = [
     { name = "defusedxml" },
+    { name = "fast-bss-eval" },
     { name = "faster-whisper" },
     { name = "huggingface-hub" },
     { name = "insightface" },
@@ -3285,6 +3355,7 @@ ml = [
     { name = "opencv-python-headless" },
     { name = "pandas" },
     { name = "pyannote-audio" },
+    { name = "pyarrow" },
     { name = "pyloudnorm" },
     { name = "pysndfx" },
     { name = "silero-vad" },
@@ -3292,6 +3363,7 @@ ml = [
     { name = "speechbrain" },
     { name = "torch" },
     { name = "torchaudio" },
+    { name = "torchmetrics", extra = ["audio"] },
     { name = "tqdm" },
 ]
 
@@ -3313,6 +3385,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "defusedxml", marker = "extra == 'ml'", specifier = ">=0.7" },
+    { name = "fast-bss-eval", marker = "extra == 'ml'", specifier = ">=0.1.4" },
     { name = "faster-whisper", marker = "extra == 'ml'", specifier = ">=1.1" },
     { name = "huggingface-hub", marker = "extra == 'ml'", specifier = ">=0.26" },
     { name = "insightface", marker = "extra == 'ml'", specifier = ">=0.7.3" },
@@ -3323,6 +3396,7 @@ requires-dist = [
     { name = "opencv-python-headless", marker = "extra == 'ml'", specifier = ">=4.10" },
     { name = "pandas", marker = "extra == 'ml'", specifier = ">=2.2" },
     { name = "pyannote-audio", marker = "extra == 'ml'", specifier = ">=3.3" },
+    { name = "pyarrow", marker = "extra == 'ml'", specifier = ">=18.0" },
     { name = "pyloudnorm", marker = "extra == 'ml'", specifier = ">=0.1" },
     { name = "pysndfx", marker = "extra == 'ml'", specifier = ">=0.3.6" },
     { name = "silero-vad", marker = "extra == 'ml'", specifier = ">=5.1" },
@@ -3330,6 +3404,7 @@ requires-dist = [
     { name = "speechbrain", marker = "extra == 'ml'", specifier = ">=1.0" },
     { name = "torch", marker = "extra == 'ml'", index = "https://download.pytorch.org/whl/cu126" },
     { name = "torchaudio", marker = "extra == 'ml'", index = "https://download.pytorch.org/whl/cu126" },
+    { name = "torchmetrics", extras = ["audio"], marker = "extra == 'ml'", specifier = ">=1.6" },
     { name = "tqdm", marker = "extra == 'ml'", specifier = ">=4.66" },
 ]
 provides-extras = ["ml"]

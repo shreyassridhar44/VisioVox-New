@@ -28,6 +28,9 @@ ml = [
   "pysndfx>=0.3.6",
   "tqdm>=4.66",
   "defusedxml>=0.7",
+  "torchmetrics[audio]>=1.6",
+  "fast-bss-eval>=0.1.4",
+  "pyarrow>=18.0",
 ]
 
 [tool.uv.sources]
@@ -134,7 +137,8 @@ disallow_untyped_decorators = false
 module = ["torch.*", "torchaudio.*", "speechbrain.*", "pyannote.*",
           "faster_whisper.*", "soundfile.*", "librosa.*", "df.*",
           "nara_wpe.*", "silero_vad.*", "cv2.*", "onnxruntime.*",
-          "pyloudnorm.*", "insightface.*", "aioboto3.*", "botocore.*",
+          "pyloudnorm.*", "insightface.*", "torchmetrics.*", "fast_bss_eval.*", "pandas.*",
+          "pesq.*", "pystoi.*", "aioboto3.*", "botocore.*",
           "celery.*", "sse_starlette.*",
           "defusedxml.*"]
 ignore_missing_imports = true
