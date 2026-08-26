@@ -20,9 +20,9 @@ Usage:  uv run python scripts/fetch_testvideos.py
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +37,7 @@ CLIPS = OUT / "clips"
 SAMPLE_RATE = 16_000
 CLIP_SECONDS = 90
 N_SPEAKERS = 4
+MIN_BYTES = 100_000  # anything smaller is an error page
 
 
 @dataclass(frozen=True)
@@ -56,21 +57,43 @@ MEETINGS = [
 
 
 def fetch(url: str, dest: Path) -> bool:
-    """Download unless already present and non-trivial (404 pages are tiny)."""
-    if dest.exists() and dest.stat().st_size > 100_000:
+    """Download unless already present and non-trivial (404 pages are tiny).
+
+    Uses wget -c rather than urlretrieve: the AMI server stalls mid-transfer,
+    and urlretrieve has no timeout, so a stall hangs the run indefinitely
+    instead of failing. -c also resumes a partial file rather than restarting.
+    """
+    if dest.exists() and dest.stat().st_size > MIN_BYTES:
         print(f"    have {dest.name}")
         return True
     dest.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        print(f"    get  {dest.name}", flush=True)
-        urllib.request.urlretrieve(url, dest)  # noqa: S310 - fixed https host
-    except Exception as exc:
-        print(f"    FAIL {dest.name}: {exc}")
-        dest.unlink(missing_ok=True)
+    print(f"    get  {dest.name}", flush=True)
+    wget = shutil.which("wget")
+    if wget is None:
+        print("    FAIL: wget not on PATH")
         return False
-    if dest.stat().st_size < 100_000:
-        print(f"    FAIL {dest.name}: {dest.stat().st_size} bytes (404 page?)")
-        dest.unlink(missing_ok=True)
+    proc = subprocess.run(  # noqa: S603 - resolved path, fixed argv, shell=False
+        [
+            wget,
+            "-c",
+            "-q",
+            "--tries=5",
+            "--read-timeout=60",  # a stalled socket fails instead of hanging
+            "--timeout=60",
+            "--waitretry=10",
+            "-O",
+            str(dest),
+            url,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0 or not dest.exists() or dest.stat().st_size <= MIN_BYTES:
+        size = dest.stat().st_size if dest.exists() else 0
+        print(f"    FAIL {dest.name}: rc={proc.returncode}, {size} bytes")
+        if size <= MIN_BYTES:
+            dest.unlink(missing_ok=True)
         return False
     return True
 
@@ -89,30 +112,42 @@ def load_mono_16k(path: Path) -> np.ndarray:
     return audio
 
 
-def speech_mask(track: np.ndarray, frame: int = 160) -> np.ndarray:
-    """Cheap energy VAD at 10 ms resolution, thresholded per track.
+def speech_masks(tracks: list[np.ndarray], dominance_db: float = 15.0) -> np.ndarray:
+    """Per-speaker speech mask at 10 ms resolution, robust to headset bleed.
 
-    A fixed dB floor would misjudge headsets recorded at different gains, so
-    the threshold is relative to each track's own active level.
+    A close-talking headset picks up the other participants. Measured on AMI,
+    that bleed sits about 28 dB below the actual talker, so a per-track
+    threshold -- which is what a naive VAD applies -- marks bleed as speech and
+    reports near-total overlap. The first version of this function did exactly
+    that and claimed 80% overlap on a clip that is mostly one person talking.
+
+    Two conditions instead: the frame must be loud relative to that speaker's
+    own speech level, and it must be within `dominance_db` of the loudest
+    channel at that instant. Bleed fails the second.
+
+    Returns (n_speakers, n_frames) of bool.
     """
-    n = len(track) // frame
-    energy = (track[: n * frame] ** 2).reshape(n, frame).mean(axis=1)
-    db = 10 * np.log10(energy + 1e-10)
-    speech_ref = np.percentile(db, 95)
-    mask: np.ndarray = db > (speech_ref - 25)
+    frame = 160  # 10 ms at 16 kHz
+    n = min(len(t) for t in tracks) // frame
+    stacked = np.stack([t[: n * frame] for t in tracks])
+    energy = (stacked**2).reshape(len(tracks), n, frame).mean(axis=2)
+    db = 10 * np.log10(energy + 1e-12)
+
+    own_floor = np.percentile(db, 99, axis=1, keepdims=True) - 20
+    frame_max = db.max(axis=0, keepdims=True)
+    mask: np.ndarray = (db > own_floor) & (db > frame_max - dominance_db)
     return mask
 
 
-def pick_overlap_window(masks: list[np.ndarray], seconds: int) -> tuple[int, float]:
+def pick_overlap_window(masks: np.ndarray, seconds: int) -> tuple[int, float]:
     """Return (start_frame, overlap_ratio) for the densest-overlap window.
 
     Picking the window by measured overlap, rather than an arbitrary offset,
     is what makes these clips exercise the case the product exists for.
     """
     width = seconds * 100  # 10 ms frames
-    n = min(len(m) for m in masks)
-    stack = np.stack([m[:n] for m in masks]).astype(np.int16)
-    active = stack.sum(axis=0)
+    n = masks.shape[1]
+    active = masks.astype(np.int16).sum(axis=0)
     overlapping = (active >= 2).astype(np.float32)
     # Skip the first 60 s: AMI meetings open with setup chatter and silence.
     lead_in = 60 * 100
@@ -149,7 +184,7 @@ def build(meeting: Meeting) -> dict[str, object] | None:
     n = min(len(h) for h in headsets)
     headsets = [h[:n] for h in headsets]
 
-    masks = [speech_mask(h) for h in headsets]
+    masks = speech_masks(headsets)
     start_frame, overlap = pick_overlap_window(masks, CLIP_SECONDS)
     start_s = start_frame / 100.0
     print(f"    window {start_s:.1f}s +{CLIP_SECONDS}s, overlap ratio {overlap:.3f}")
@@ -204,7 +239,8 @@ def build(meeting: Meeting) -> dict[str, object] | None:
         ]
     )
 
-    speaking = [float(m[start_frame : start_frame + CLIP_SECONDS * 100].mean()) for m in masks]
+    window = masks[:, start_frame : start_frame + CLIP_SECONDS * 100]
+    speaking = [float(window[i].mean()) for i in range(window.shape[0])]
     return {
         "meeting": meeting.ident,
         "site": meeting.site,
