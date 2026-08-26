@@ -235,7 +235,38 @@ output is which speaker, so a fixed ordering would measure ordering luck rather 
 
 ---
 
-## 9. Reproducing
+## 9. The documented model config does not fit the GPU
+
+`configs/seave_base.yaml` (docs/07 §2) specifies `emb_dim: 128` at `batch_size: 8`, annotated
+"24 GB headroom buys real capacity". Measured on the A5000 it does not.
+
+| Config | Peak memory | Verdict |
+|---|---|---|
+| emb 128, batch 8 — **as documented** | 47.3 GB | does not fit |
+| emb 128, batch 4 | 23.7 GB | fits with no headroom |
+| **emb 96, batch 4** | **17.2 GB** | adopted |
+| emb 64, batch 4 | 12.7 GB | fallback |
+
+All figures are *with* gradient checkpointing, which was added for this reason and costs roughly
+30% more compute. Without it, even emb 48 at batch 8 exceeded the card.
+
+**The dangerous part is that exceeding it does not fail.** WSL pages the excess to system RAM, so an
+over-sized config trains at a fraction of the speed while looking like it is working. The emb-48
+run reported a 54.5 GB peak on a 24 GB card and completed — that number is the tell, and without
+looking for it the symptom would have been "training is inexplicably slow".
+
+The cost of the change is capacity: 4.1M parameters instead of 8.0M. `grad_accum: 4` restores the
+documented effective batch of 16, so optimiser behaviour is unchanged.
+
+TF-GridNet is memory-hungry here for a structural reason. The inter-frame LSTM runs one sequence per
+frequency bin — 2,056 sequences of 500 steps at batch 8 — and backward retains state at every step.
+That path is also the one worth keeping: speaker identity is a long-horizon property, and a model
+without it re-decides who it is following every frame, which is precisely how mid-utterance speaker
+swaps happen.
+
+---
+
+## 10. Reproducing
 
 ```bash
 uv run python scripts/fetch_testvideos.py          # build clips from AMI
@@ -248,7 +279,7 @@ failure is audible, not only tabulated — the speaker swap is obvious on the na
 
 ---
 
-## 10. Measurement bugs found and fixed
+## 11. Measurement bugs found and fixed
 
 Recorded because each produced plausible numbers, and three of them favoured the wrong conclusion.
 
