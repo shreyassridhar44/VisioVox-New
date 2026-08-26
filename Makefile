@@ -37,6 +37,7 @@ fmt:  ## Format Python and TypeScript
 typecheck:  ## mypy --strict and tsc
 	$(UV) run mypy .
 	$(PNPM) exec tsc --build
+	$(PNPM) --filter @visiovox/web exec tsc --noEmit
 
 test:  ## Run the test suite (skips GPU-marked tests)
 	$(UV) run pytest -m "not gpu"
@@ -61,6 +62,9 @@ eval-quick:  ## 30-item ML eval; gates on regression
 
 check: lint typecheck test contracts-check  ## Everything CI runs
 
+web-build:  ## Production build of the Next.js app (also typechecks and lints it)
+	$(PNPM) --filter @visiovox/web run build
+
 clean:  ## Remove build and cache artefacts
-	rm -rf .mypy_cache .pytest_cache .ruff_cache
+	rm -rf .mypy_cache .pytest_cache .ruff_cache apps/web/.next
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +

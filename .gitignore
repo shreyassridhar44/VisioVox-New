@@ -45,6 +45,10 @@ coverage.xml
 
 # ---------- Node ----------
 node_modules/
+
+# Next.js generated
+.next/
+next-env.d.ts
 .pnpm-store/
 .next/
 out/
@@ -102,7 +106,12 @@ eval/history.jsonl
 *.m4a
 *.flac
 *.aac
-*.ts
+# MPEG-TS segments live under HLS output directories. A bare *.ts here
+# also ignores every TypeScript source file in the repo, which silently
+# dropped the generated API client from three commits before it was
+# noticed. Scope it to where segments actually are.
+**/hls/**/*.ts
+**/segments/**/*.ts
 *.m3u8
 !tests/fixtures/**
 !apps/web/public/demo/**

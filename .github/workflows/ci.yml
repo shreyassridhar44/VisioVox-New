@@ -55,6 +55,8 @@ jobs:
       - run: pnpm exec prettier --check .
       - run: pnpm exec eslint .
       - run: pnpm exec tsc --build
+      # next build runs type checking and lint over the app router too.
+      - run: pnpm --filter @visiovox/web run build
 
   contracts:
     name: contracts are in sync
