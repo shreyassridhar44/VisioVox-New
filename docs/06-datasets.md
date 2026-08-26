@@ -12,9 +12,13 @@ actually works; Tiers 1–2 exist to get the model to a useful starting point ch
 | **T1 Synthetic audio** | Bootstrap the separator; validate the training loop | LibriMix, WSJ0-2mix-style | Cheap, unlimited, perfect ground truth |
 | **T2 Synthetic AV** | Teach visual conditioning | VoxCeleb2-Mix, LRS3-Mix | Ground truth + real faces |
 | **T3 Realistic AV** | Close the domain gap | AVSpeech-Mix, EasyCom, AMI, MISP | Real rooms, real conversation |
-| **T4 In-domain** | Fine-tune + honest evaluation | **VVX-Train / VVX-Eval (self-recorded)** | Matches actual product input |
+| **T4 In-domain** | Fine-tune + honest evaluation | **AMI-Eval** (Closeup video + Headset references) | Real multi-party conversation with ground-truth per-speaker audio ([ADR-0015](./adr/0015-ami-replaces-vvx.md)) |
 
-**The rule that matters:** every headline number in the report is reported on **VVX-Eval (T4)**.
+**The rule that matters:** every headline number in the report is reported on **AMI-Eval (T4)**,
+and is labelled as a *meeting-recording* result rather than a general one. VVX, the self-recorded
+corpus this tier originally specified, will not be recorded; [ADR-0015](./adr/0015-ami-replaces-vvx.md)
+records the substitution and states plainly what it costs — principally that AMI is one domain
+(seated meetings, 352x288 table cameras) while the product accepts arbitrary uploaded video.
 Benchmark numbers on T1/T2 are reported only for comparability with literature and are labelled as
 such. See [`03-research-landscape.md`](./03-research-landscape.md) §7.
 

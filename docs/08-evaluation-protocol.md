@@ -1,6 +1,7 @@
 # 08 — Evaluation Protocol
 
-The rule: **every headline number is measured on VVX-Eval by our own harness.** Benchmark numbers on
+The rule: **every headline number is measured on AMI-Eval by our own harness**, and is reported
+as a meeting-recording result rather than a general one ([ADR-0015](./adr/0015-ami-replaces-vvx.md)). Benchmark numbers on
 public sets are reported for comparability only and labelled as such.
 
 ---
@@ -55,7 +56,7 @@ not measured by anything in the standard separation literature.
 | Overlap detection | F1 on overlapped frames | ≥ 0.75 |
 | Face detection | mAP@0.5 | ≥ 0.90 |
 | ASD | mAP on AVA-ActiveSpeaker | ≥ 0.90 |
-| Face↔voice binding | Accuracy on VVX-Eval | ≥ 0.90 |
+| Face↔voice binding | Accuracy on AMI-Eval | ≥ 0.90 |
 
 ### 1.5 Calibration
 
