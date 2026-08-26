@@ -39,13 +39,12 @@ S3 fusion, S7 WhisperX, S9 packaging.
 
 **Phase 0 exit evidence:** `make check` green (ruff, mypy strict, eslint, tsc, pytest); `make dev`
 brings up Postgres, Redis, MinIO and mail with every service answering; `make smoke` reports
-6 ok / 1 skipped / 0 failed. GPU baseline: A5000 sm_86, bf16 native, 48.4 TFLOP/s bf16 matmul.
+7 ok / 0 skipped / 0 failed. GPU baseline: A5000 sm_86, bf16 native, 48.4 TFLOP/s bf16 matmul.
 
 ### Immediate next actions
 
-1. ⭐ **HuggingFace token** — the one manual blocker left. Accept gated terms for
-   `pyannote/speaker-diarization-3.1` and `pyannote/segmentation-3.0`, put the token in
-   `.env.local`, then `make smoke` should report 7 ok / 0 skipped.
+1. ✅ **HuggingFace token** — done (2026-08-26). In `.env.local`; `make smoke` reports
+   **7 ok / 0 skipped / 0 failed**. VoxCeleb2 download key is in the same file.
 2. **Dataset pipeline** — running unattended in tmux. `librimix` fetches; `dataset` waits for it
    and then generates Libri2Mix (16k / min / mix_both only). Logs in `~/logs/`. Both resumable.
    Generation aborts if the host volume has under 260 GB free.

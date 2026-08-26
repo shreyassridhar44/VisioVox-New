@@ -127,7 +127,9 @@ are not competition for VRAM.
 ## 5. What the smoke test found
 
 `make smoke` runs every pretrained component once on one real two-speaker mixture.
-Result: **6 ok, 1 skipped, 0 failed** — the Phase 0 exit condition for the ML side.
+Result: **7 ok, 0 skipped, 0 failed** — the Phase 0 exit condition for the ML side, fully met.
+pyannote returns 2 speakers over 2 turns on the two-speaker fixture, so that stage is checked
+against a correct answer rather than merely running.
 
 One thing surfaced that is worth acting on before Phase 1:
 
@@ -153,6 +155,6 @@ shown up later as an unexplained gap between the Tier 0 and Tier 1 numbers.
 
 | Item | Blocks | Owner |
 |---|---|---|
-| **HuggingFace token + accepted pyannote licences** | S2A diarization; the smoke test skips it | Manual — accept terms, put token in `.env.local` |
+| ~~HuggingFace token~~ | ~~S2A diarization~~ | **Done** — token in `.env.local`, smoke test at 7/7 |
 | Reclaim `C:` space | Nothing yet, but leaves no headroom for Windows | `wsl --unregister Ubuntu` (the superseded distro) |
 | Lab-admin questions from §1b item 8 | Whether long runs survive; reimaging policy | Ask before the first multi-day run |

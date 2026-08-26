@@ -12,7 +12,7 @@ help:  ## Show this help
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 install:  ## Install all Python and Node dependencies
-	$(UV) sync --all-packages
+	$(UV) sync --all-packages --extra ml
 	$(PNPM) install
 	$(UV) run pre-commit install --install-hooks
 
@@ -45,7 +45,7 @@ test-gpu:  ## Run GPU-marked tests (workstation only)
 	$(UV) run pytest -m gpu
 
 smoke:  ## Phase 0 pretrained-model smoke test (requires CUDA)
-	$(UV) run python scripts/smoke_pretrained.py
+	@set -a; [ -f .env.local ] && . ./.env.local; set +a; $(UV) run python scripts/smoke_pretrained.py
 
 eval-quick:  ## 30-item ML eval; gates on regression
 	$(UV) run python -m eval.quick

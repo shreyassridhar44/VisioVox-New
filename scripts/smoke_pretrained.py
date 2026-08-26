@@ -182,10 +182,23 @@ def check_pyannote() -> str:
             "pyannote/speaker-diarization-3.1 and pyannote/segmentation-3.0"
         )
     pipeline.to(torch.device("cuda"))
-    diarization = pipeline(str(FIXTURE))
-    assert isinstance(diarization, Annotation)
-    turns = list(diarization.itertracks(yield_label=True))
-    return f"{len(diarization.labels())} speakers over {len(turns)} turns"
+    # Feed a waveform rather than a path. pyannote 3.x reads files through
+    # torchcodec, whose shared library needs an FFmpeg build matching the one
+    # torch was compiled against; passing the tensor skips that dependency
+    # entirely and we have already decoded the audio anyway.
+    audio, sr = load_fixture()
+    result = pipeline({"waveform": torch.from_numpy(audio).unsqueeze(0), "sample_rate": sr})
+    # pyannote 4.x wraps the annotation in a DiarizeOutput dataclass; 3.x
+    # returned the Annotation directly. Accept either.
+    annotation = getattr(result, "speaker_diarization", result)
+    if not isinstance(annotation, Annotation):
+        raise RuntimeError(f"unexpected diarization result: {type(annotation).__name__}")
+
+    # ADR-0008: the pipeline can also return speaker embeddings. We do not
+    # retain them here, and the real S2A must delete them when the job ends
+    # unless the user has explicitly opted in.
+    turns = list(annotation.itertracks(yield_label=True))
+    return f"{len(annotation.labels())} speakers over {len(turns)} turns"
 
 
 STAGES: list[tuple[str, str, Callable[[], str]]] = [
