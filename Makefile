@@ -47,10 +47,19 @@ test-gpu:  ## Run GPU-marked tests (workstation only)
 smoke:  ## Phase 0 pretrained-model smoke test (requires CUDA)
 	@set -a; [ -f .env.local ] && . ./.env.local; set +a; $(UV) run python scripts/smoke_pretrained.py
 
+contracts:  ## Regenerate the OpenAPI spec and the TS client
+	$(UV) run python scripts/export_openapi.py
+	$(PNPM) exec openapi-typescript packages/contracts/openapi.json -o packages/ts-client/src/generated/api.ts
+	$(PNPM) exec prettier --write packages/ts-client/src/generated/api.ts packages/contracts/openapi.json
+
+contracts-check:  ## Fail if the committed contract is stale
+	@$(MAKE) --no-print-directory contracts
+	@git diff --exit-code -- packages/contracts/openapi.json packages/ts-client/src/generated/api.ts 	  || (echo "contract drift: run 'make contracts' and commit the result"; exit 1)
+
 eval-quick:  ## 30-item ML eval; gates on regression
 	$(UV) run python -m eval.quick
 
-check: lint typecheck test  ## Everything CI runs
+check: lint typecheck test contracts-check  ## Everything CI runs
 
 clean:  ## Remove build and cache artefacts
 	rm -rf .mypy_cache .pytest_cache .ruff_cache
