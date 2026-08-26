@@ -118,7 +118,51 @@ The SI-SDR comparison is the part that needs the caveats.
 
 ---
 
-## 6. Reproducing
+## 6. The motion-energy ASD is not good enough for fusion
+
+Measured on AMI-Eval TS3003a, over the full 120 s clip with per-participant Closeup video and
+per-participant headset references.
+
+Agreement between each face video and each reference audio track, where the correct pairing should
+dominate its row:
+
+| | ref0 | ref1 | ref2 | ref3 |
+|---|---|---|---|---|
+| face0 | −0.013 | −0.013 | −0.002 | −0.010 |
+| face1 | −0.026 | −0.012 | −0.011 | −0.016 |
+| face2 | **+0.080** | +0.046 | −0.005 | +0.031 |
+| face3 | +0.011 | **+0.013** | +0.001 | +0.005 |
+
+There is no diagonal. Every value sits at noise level — the largest is 0.080 where a genuine match
+should be far higher, and two rows pick the same reference. Reference activity was not the problem:
+the four speakers were active for 4.8%, 7.3%, 34.9% and 11.0% of the window.
+
+**Two things follow, and they are different in kind.**
+
+The first is a capability gap. `S2B` scores speaking activity by lip-region motion energy, which the
+module has always declared a placeholder for Light-ASD and tags `asd_is_motion_baseline`. This is
+the measurement showing it is not merely weaker — it carries almost no usable signal on real video,
+so `S3` cannot bind faces to voices with it. **The `≥ 0.90` face↔voice binding target in
+`08-evaluation-protocol.md` §58 is unreachable until Light-ASD replaces it.** That is a Phase 4
+dependency, not a tuning problem.
+
+The second is an open question about the data. The builder assumes `Closeup{N+1}` shows the
+participant wearing `Headset-N`. That assumption is untested — this experiment was meant to confirm
+it and could not, because the instrument was too blunt. It matters: if the correspondence is wrong,
+every ground-truth binding label derived from AMI is wrong, and a visual pathway trained on it would
+learn to associate the wrong face with the wrong voice.
+
+**Do not train the visual pathway on AMI-derived binding labels until the correspondence is
+verified.** Audio-only work is unaffected, as is everything in §2 and §3 above, none of which uses
+video.
+
+Verification options, cheapest first: check the AMI corpus documentation for a published camera map;
+or re-run this experiment with a real ASD model, where a correct mapping should produce an
+unambiguous diagonal.
+
+---
+
+## 7. Reproducing
 
 ```bash
 uv run python scripts/fetch_testvideos.py          # build clips from AMI
@@ -131,7 +175,7 @@ failure is audible, not only tabulated — the speaker swap is obvious on the na
 
 ---
 
-## 7. Measurement bugs found and fixed
+## 8. Measurement bugs found and fixed
 
 Recorded because each produced plausible numbers, and three of them favoured the wrong conclusion.
 

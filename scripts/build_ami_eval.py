@@ -45,7 +45,7 @@ from pipeline.vad import overlap_ratio, speech_masks
 BASE = "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus"
 ROOT = Path.home() / "data" / "ami"
 RAW = ROOT / "raw"
-OUT = ROOT / "eval"
+OUT = ROOT / "sets"  # sets/<split>/<meeting>, not eval/eval/...
 
 RATE = 16_000
 N_PARTICIPANTS = 4
