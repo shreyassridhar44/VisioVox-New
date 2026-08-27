@@ -126,6 +126,51 @@ def encode_m4a(src: Path, dest: Path) -> int:
     return dest.stat().st_size
 
 
+def package_hls(src_m4a: Path, out_dir: Path, name: str) -> str:
+    """One audio-only HLS rendition, 4 s fMP4 segments (docs/12 §6 step 4).
+
+    Audio renditions are muxed apart from video so switching audio never
+    disturbs the video buffer — the reason a rendition switch costs a few
+    hundred milliseconds of sound rather than a visible stall.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    playlist = out_dir / f"{name}.m3u8"
+    run([
+        "ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(src_m4a),
+        "-c:a", "copy", "-f", "hls", "-hls_segment_type", "fmp4",
+        "-hls_time", "4", "-hls_playlist_type", "vod", "-hls_flags", "single_file",
+        "-hls_fmp4_init_filename", f"{name}_init.mp4",
+        "-hls_segment_filename", str(out_dir / f"{name}.m4s"),
+        str(playlist),
+    ])  # fmt: skip
+    return playlist.name
+
+
+def write_master_playlist(dest: Path, renditions: list[tuple[str, str]], video: str) -> None:
+    """The multivariant playlist that binds the renditions to the video.
+
+    Hand-written rather than produced by ffmpeg: the `EXT-X-MEDIA` group is the
+    whole point of this file and ffmpeg's hls muxer has no clean way to emit
+    one. The first rendition is DEFAULT=YES, which is what the player falls
+    back to before a speaker has been chosen.
+    """
+    lines = ["#EXTM3U", "#EXT-X-VERSION:7", ""]
+    for index, (name, uri) in enumerate(renditions):
+        default = "YES" if index == 0 else "NO"
+        lines.append(
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="spk",'
+            f'NAME="{name}",LANGUAGE="en",DEFAULT={default},'
+            f'AUTOSELECT={default},URI="{uri}"'
+        )
+    lines += [
+        "",
+        '#EXT-X-STREAM-INF:BANDWIDTH=800000,CODECS="avc1.64001f,mp4a.40.2",AUDIO="spk"',
+        video,
+        "",
+    ]
+    dest.write_text("\n".join(lines), encoding="utf-8")
+
+
 def make_video(dest: Path, seconds: float, width: int, height: int) -> None:
     """A silent test pattern carrying a visible running timestamp.
 
@@ -239,6 +284,23 @@ def main(argv: list[str]) -> int:
     make_video(OUT / "video.mp4", duration_s, args.width, args.height)
     print(f"  video.mp4  {(OUT / 'video.mp4').stat().st_size / 1024:.0f} kB")
 
+    # ---- HLS renditions ------------------------------------------------------
+    # Packaged even though this clip is far inside the WebAudio envelope: the
+    # streaming engine is the path a real 30-minute meeting takes, and an
+    # engine with no fixture is an engine nobody has run.
+    hls_dir = OUT / "hls"
+    hls_names = {"mixed": "Original mix", "s1": "Speaker 1", "s2": "Speaker 2", "s3": "Speaker 3"}
+    hls_uris: dict[str, str] = {}
+    for key in tracks:
+        hls_uris[key] = "audio/" + package_hls(OUT / f"{key}.m4a", hls_dir / "audio", key)
+    video_playlist = "video/" + package_hls(OUT / "video.mp4", hls_dir / "video", "video")
+    write_master_playlist(
+        hls_dir / "master.m3u8",
+        [(hls_names[k], hls_uris[k]) for k in ("mixed", "s1", "s2", "s3")],
+        video_playlist,
+    )
+    print(f"  hls/master.m3u8  {len(hls_uris)} audio renditions")
+
     # ---- captions ------------------------------------------------------------
     # The contract requires `captions.vtt` on every speaker, so --no-captions
     # writes an empty transcript rather than omitting the file. That keeps the
@@ -283,7 +345,10 @@ def main(argv: list[str]) -> int:
             "speaking_ratio": round(speaking_ratio(normalised[key]), 4),
             "mean_confidence": round(mean_confidence(transcript), 4),
             "extraction_ok": True,
-            "audio": {"faithful": {"url": f"{base}/{key}.m4a", "bytes": encoded[key]}},
+            "audio": {
+                "faithful": {"url": f"{base}/{key}.m4a", "bytes": encoded[key]},
+                "hls": f"{base}/hls/{hls_uris[key]}",
+            },
             "captions": {
                 "vtt": f"{base}/{key}.vtt",
                 "json": f"{base}/{key}.captions.json",
@@ -300,7 +365,12 @@ def main(argv: list[str]) -> int:
         "overlap_ratio": round(sum(s["speaking_ratio"] for s in speakers) - 1.0, 4),
         "video": {"url": f"{base}/video.mp4", "width": args.width, "height": args.height},
         "speakers": speakers,
-        "mixed": {"audio_url": f"{base}/mixed.m4a"},
+        "mixed": {"audio_url": f"{base}/mixed.m4a", "hls": f"{base}/hls/{hls_uris['mixed']}"},
+        "master_playlist": f"{base}/hls/master.m3u8",
+        # A 12-second clip is squarely inside the WebAudio envelope, so that is
+        # the honest hint. The HLS assets are packaged anyway and the demo page
+        # can force that engine, which is the only way to exercise the path a
+        # real long recording will take.
         "playback_hint": "webaudio",
         "warnings": ["fixture_no_face_tracks"],
         # Fixtures are served from the dev server, not from signed storage, so

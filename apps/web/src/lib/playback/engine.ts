@@ -9,7 +9,13 @@
 
 import type { Manifest, TrackId } from './manifest';
 
-export type EngineState = 'idle' | 'loading' | 'ready' | 'error';
+/**
+ * `switching` belongs to the HLS engine alone. There a rendition change
+ * flushes and refills the audio buffer, so the sound really is absent for a
+ * few hundred milliseconds and the player has to say so. WebAudio never enters
+ * it: the crossfade is scheduled and there is nothing to wait for.
+ */
+export type EngineState = 'idle' | 'loading' | 'ready' | 'switching' | 'error';
 
 export interface EngineEvents {
   /** The audible track changed. Captions follow this, not a separate timer. */

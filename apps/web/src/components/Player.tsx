@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AudioMode, Manifest, Speaker, TrackId } from '@/lib/playback/manifest';
+import type { AudioMode, Manifest, PlaybackHint, Speaker, TrackId } from '@/lib/playback/manifest';
 import { MIXED_TRACK, hasNaturalMode } from '@/lib/playback/manifest';
 import type { CaptionIndex, CaptionSegment } from '@/lib/playback/captions';
 import {
@@ -25,15 +25,23 @@ import {
   segmentAt,
   wordAt,
 } from '@/lib/playback/captions';
-import type { PlaybackEngine } from '@/lib/playback/engine';
+import type { EngineState, PlaybackEngine } from '@/lib/playback/engine';
 import { WebAudioSyncEngine } from '@/lib/playback/web-audio-engine';
+import { HlsSyncEngine } from '@/lib/playback/hls-engine';
 import { MAX_AV_OFFSET_MS, resolveEngine } from '@/lib/playback/sync';
 
 interface PlayerProps {
   readonly manifest: Manifest;
+  /**
+   * Override the server's engine choice. Only the demo page uses this — in
+   * production the policy lives in `playback_hint` so the thresholds exist in
+   * one place, and a client that could silently upgrade itself to WebAudio
+   * would decode a two-hour recording into memory.
+   */
+  readonly forceEngine?: PlaybackHint;
 }
 
-export function Player({ manifest }: PlayerProps): React.JSX.Element {
+export function Player({ manifest, forceEngine }: PlayerProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const engineRef = useRef<PlaybackEngine | null>(null);
 
@@ -44,11 +52,12 @@ export function Player({ manifest }: PlayerProps): React.JSX.Element {
   const [offsetMs, setOffsetMs] = useState(0);
   const [mediaMs, setMediaMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [engineState, setEngineState] = useState<EngineState>('idle');
   const [captions, setCaptions] = useState<Record<string, CaptionIndex>>({});
 
   const engineKind = useMemo(
-    () => resolveEngine(manifest, typeof AudioContext !== 'undefined'),
-    [manifest],
+    () => forceEngine ?? resolveEngine(manifest, typeof AudioContext !== 'undefined'),
+    [manifest, forceEngine],
   );
   const naturalAvailable = useMemo(() => hasNaturalMode(manifest), [manifest]);
 
@@ -58,20 +67,13 @@ export function Player({ manifest }: PlayerProps): React.JSX.Element {
     const video = videoRef.current;
     if (video === null) return;
 
-    if (engineKind === 'hls') {
-      // HlsSyncEngine is weeks 9-11 of Phase 6. Saying so is better than a
-      // player that silently plays the mixture and looks broken instead.
-      setError(
-        'This recording is too long for in-browser mixing. Streaming playback is not built yet.',
-      );
-      return;
-    }
-
-    const engine = new WebAudioSyncEngine({ mode });
+    const engine: PlaybackEngine =
+      engineKind === 'hls' ? new HlsSyncEngine({ mode }) : new WebAudioSyncEngine({ mode });
     engineRef.current = engine;
 
     const offTrack = engine.on('trackchange', setActiveId);
     const offDrift = engine.on('drift', setDrift);
+    const offState = engine.on('state', setEngineState);
     const offError = engine.on('error', (e) => {
       setError(e.message);
     });
@@ -94,6 +96,7 @@ export function Player({ manifest }: PlayerProps): React.JSX.Element {
       cancelled = true;
       offTrack();
       offDrift();
+      offState();
       offError();
       engine.destroy();
       engineRef.current = null;
@@ -169,25 +172,34 @@ export function Player({ manifest }: PlayerProps): React.JSX.Element {
   return (
     <div className="player stack">
       <div className="stage">
+        {/* `muted` is set by the engine, not here. WebAudio mutes the element
+            because it renders the audio itself; HLS must not, because the
+            element is what carries the sound. Declaring it in JSX would let
+            React reassert it on any re-render and silence the HLS path. */}
         {manifest.has_video && manifest.video !== undefined ? (
           <video
             ref={videoRef}
             className="stage-video"
-            src={manifest.video.url}
+            src={engineKind === 'hls' ? undefined : manifest.video.url}
             controls
             playsInline
-            muted
             preload="auto"
           />
         ) : (
           <div className="stage-audio-only">
-            <video ref={videoRef} controls preload="auto" muted />
+            <video ref={videoRef} controls preload="auto" />
             <p className="muted">Audio only — no video track in this recording.</p>
           </div>
         )}
       </div>
 
       {error !== null && <p className="error">{error}</p>}
+
+      {engineState === 'switching' && (
+        <p className="muted switching" role="status">
+          Switching speaker…
+        </p>
+      )}
 
       <SpeakerRail
         speakers={manifest.speakers}
@@ -222,23 +234,30 @@ export function Player({ manifest }: PlayerProps): React.JSX.Element {
           </div>
         )}
 
-        <label className="offset">
-          Audio delay
-          <input
-            type="range"
-            min={-MAX_AV_OFFSET_MS}
-            max={MAX_AV_OFFSET_MS}
-            step={10}
-            value={offsetMs}
-            onChange={(e) => {
-              changeOffset(Number(e.target.value));
-            }}
-          />
-          <output>{String(Math.round(offsetMs))} ms</output>
-        </label>
+        {/* Offered only on WebAudio. Under HLS one element carries both
+            streams, so nothing in the page can shift them against each other
+            and a slider that appeared to would be theatre. */}
+        {engineKind === 'webaudio' && (
+          <label className="offset">
+            Audio delay
+            <input
+              type="range"
+              min={-MAX_AV_OFFSET_MS}
+              max={MAX_AV_OFFSET_MS}
+              step={10}
+              value={offsetMs}
+              onChange={(e) => {
+                changeOffset(Number(e.target.value));
+              }}
+            />
+            <output>{String(Math.round(offsetMs))} ms</output>
+          </label>
+        )}
 
         <span className="muted drift" title="Video minus audio, corrected continuously">
-          drift {String(Math.round(drift))} ms
+          {engineKind === 'webaudio'
+            ? `drift ${String(Math.round(drift))} ms`
+            : 'streaming · browser-synced'}
         </span>
       </div>
     </div>

@@ -322,6 +322,14 @@ th {
   font-variant-numeric: tabular-nums;
 }
 
+/* Shown only on the HLS path, where a rendition switch really does silence
+   the audio for a few hundred milliseconds while the buffer refills. */
+.switching {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
 .code-block {
   margin: 0;
   padding: 0.7rem 0.85rem;

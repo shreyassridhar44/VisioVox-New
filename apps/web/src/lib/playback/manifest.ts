@@ -76,7 +76,11 @@ export interface Manifest {
   readonly overlap_ratio?: number;
   readonly video?: VideoTrack;
   readonly speakers: readonly Speaker[];
-  readonly mixed: { readonly audio_url: string };
+  readonly mixed: { readonly audio_url: string; readonly hls?: string };
+  /** The multivariant playlist. Present only when the project was packaged
+   *  for streaming, which is why `playback_hint: 'hls'` alone is not enough
+   *  for the HLS engine to start. */
+  readonly master_playlist?: string;
   readonly playback_hint: PlaybackHint;
   readonly warnings: readonly string[];
   readonly signed_until: string;

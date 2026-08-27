@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react';
 import { Player } from '@/components/Player';
-import type { Manifest } from '@/lib/playback/manifest';
+import type { Manifest, PlaybackHint } from '@/lib/playback/manifest';
 
 const FIXTURE = '/fixtures/manifest.json';
 const GENERATE = 'uv run python scripts/make_player_fixtures.py';
@@ -25,6 +25,9 @@ type Load = { state: 'loading' } | { state: 'missing' } | { state: 'ready'; mani
 
 export default function DemoPage() {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
+  // Both engines against the same material, so the difference is audible:
+  // WebAudio switches in 80 ms, HLS flushes its buffer and takes a few hundred.
+  const [engine, setEngine] = useState<PlaybackHint>('webaudio');
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +75,27 @@ export default function DemoPage() {
 
       {load.state === 'ready' && (
         <>
-          <Player manifest={load.manifest} />
+          <div className="seg" role="group" aria-label="Playback engine">
+            <button
+              type="button"
+              className={engine === 'webaudio' ? 'seg-on' : ''}
+              onClick={() => {
+                setEngine('webaudio');
+              }}
+            >
+              WebAudio
+            </button>
+            <button
+              type="button"
+              className={engine === 'hls' ? 'seg-on' : ''}
+              onClick={() => {
+                setEngine('hls');
+              }}
+            >
+              HLS
+            </button>
+          </div>
+          <Player key={engine} manifest={load.manifest} forceEngine={engine} />
           <div className="panel stack">
             <h2 style={{ margin: 0, fontSize: '1rem' }}>What you are listening to</h2>
             <p className="muted">
