@@ -80,11 +80,17 @@ datasets/
 wandb/
 mlruns/
 
-# Downloaded pretrained weights — re-fetchable, never committed
-models/
+# Downloaded pretrained weights — re-fetchable, never committed.
+# Anchored with a leading slash: a bare `models/` matches at every depth, which
+# silently swallowed `ml/models/` — the SEAVE backbone and the conditioning
+# module — so the core of the project was never committed and nobody noticed,
+# because an ignored file does not show up in `git status`. Same failure as the
+# TypeScript one in 0ce84bb; anchor these patterns unless they are meant to be
+# recursive.
+/models/
 lightning_logs/
-runs/
-outputs/
+/runs/
+/outputs/
 checkpoints/
 !checkpoints/.gitkeep
 
