@@ -1,0 +1,94 @@
+'use client';
+
+/**
+ * The player, running against real audio, with no API and no GPU.
+ *
+ * This page exists because everything else about the sync engine can pass —
+ * types, lint, unit tests — while the thing itself has never decoded a byte.
+ * Here it loads real AAC, crossfades real speech and renders real transcripts,
+ * which is the only way to find out whether it actually works.
+ *
+ * The fixture is a genuine Libri3Mix mixture and its true isolated sources, so
+ * what you hear when you pick a speaker is what a perfect extractor would
+ * return. That makes it a target rather than a mock — and when SEAVE has a
+ * checkpoint, pointing this page at real output is a direct comparison.
+ */
+
+import { useEffect, useState } from 'react';
+import { Player } from '@/components/Player';
+import type { Manifest } from '@/lib/playback/manifest';
+
+const FIXTURE = '/fixtures/manifest.json';
+const GENERATE = 'uv run python scripts/make_player_fixtures.py';
+
+type Load = { state: 'loading' } | { state: 'missing' } | { state: 'ready'; manifest: Manifest };
+
+export default function DemoPage() {
+  const [load, setLoad] = useState<Load>({ state: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(FIXTURE)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('no fixtures');
+        const manifest = (await response.json()) as Manifest;
+        if (!cancelled) setLoad({ state: 'ready', manifest });
+      })
+      .catch(() => {
+        // The fixtures are build artifacts, not committed: they are derived
+        // from a 69 GB dataset and regenerate in about two minutes.
+        if (!cancelled) setLoad({ state: 'missing' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="stack">
+      <div className="panel stack">
+        <div className="row">
+          <h1 style={{ margin: 0 }}>Player demo</h1>
+          <span className="badge">fixture</span>
+        </div>
+        <p className="muted">
+          Three people talking over each other. Pick one and you hear only them, with the picture
+          still in step and captions that follow whoever is selected.
+        </p>
+      </div>
+
+      {load.state === 'loading' && <p className="muted">Loading fixture…</p>}
+
+      {load.state === 'missing' && (
+        <div className="panel stack">
+          <p>No fixtures yet. Generate them, then reload:</p>
+          <pre className="code-block">{GENERATE}</pre>
+          <p className="muted">
+            Needs Libri3Mix and the Whisper weights already on this machine. Runs on CPU, so it will
+            not disturb a training run.
+          </p>
+        </div>
+      )}
+
+      {load.state === 'ready' && (
+        <>
+          <Player manifest={load.manifest} />
+          <div className="panel stack">
+            <h2 style={{ margin: 0, fontSize: '1rem' }}>What you are listening to</h2>
+            <p className="muted">
+              A real Libri3Mix mixture with its three true isolated sources, loudness-normalised to
+              −16 LUFS and packaged exactly as S9 will package model output. The isolated tracks are
+              ground truth, not SEAVE output — this shows the target, and the same page will show
+              the real thing once C1 produces a checkpoint.
+            </p>
+            <p className="muted">
+              The video is a test pattern with a running timestamp, so A/V sync can be checked by
+              eye. There are no faces in it, which is why the speakers are marked audio-only and the
+              rail shows numbered chips rather than thumbnails.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

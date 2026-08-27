@@ -45,13 +45,18 @@ export interface Speaker {
   readonly speaking_ratio: number;
   readonly mean_confidence: number;
   readonly extraction_ok: boolean;
+  // `faithful` and `vtt` are required by the schema, not optional-in-practice:
+  // Faithful is the default track and the one that gets transcribed, because
+  // generative restoration can hallucinate words (invariant 6). Typing them as
+  // present is what lets `tracksFor` guarantee every speaker reaches the rail.
   readonly audio: {
-    readonly faithful?: AudioAsset;
+    readonly faithful: AudioAsset;
     readonly natural?: AudioAsset;
+    readonly hls?: string;
   };
   readonly peaks_url?: string;
   readonly captions: {
-    readonly vtt?: string;
+    readonly vtt: string;
     readonly json?: string;
   };
 }
@@ -102,7 +107,6 @@ export function tracksFor(manifest: Manifest, mode: AudioMode): Track[] {
       mode === 'natural'
         ? (speaker.audio.natural ?? speaker.audio.faithful)
         : speaker.audio.faithful;
-    if (asset === undefined) continue;
     tracks.push({ id: speaker.id, url: asset.url, label: speaker.label, bytes: asset.bytes });
   }
   return tracks;
