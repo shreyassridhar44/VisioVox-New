@@ -189,6 +189,28 @@ class Trainer:
             path,
         )
 
+    def load(self, path: Path) -> dict[str, Any]:
+        """Restore model, optimiser and step counter. Returns the saved `extra`.
+
+        Optimiser state is not optional. AdamW carries first and second moment
+        estimates per parameter, and dropping them restarts the moment
+        estimates from zero — which reads as a loss spike and several thousand
+        steps of recovery, on a run that was resumed precisely to avoid losing
+        that much work.
+
+        The learning rate is not restored because it is not state: `lr_at`
+        derives it from the step, so resuming the counter resumes the schedule.
+        A run resumed with a different `--steps` therefore continues on the new
+        cosine curve rather than the old one, which is what you want when a run
+        is being extended and worth knowing when it is not.
+        """
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        self.model.load_state_dict(checkpoint["model"])
+        self.opt.load_state_dict(checkpoint["optimizer"])
+        self.step = int(checkpoint["step"])
+        extra: dict[str, Any] = dict(checkpoint.get("extra") or {})
+        return extra
+
     def write_history(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps([asdict(r) for r in self.history], indent=2), encoding="utf-8")

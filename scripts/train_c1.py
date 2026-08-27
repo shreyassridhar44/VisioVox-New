@@ -94,6 +94,13 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--chunk-seconds", type=float, default=4.0)
     ap.add_argument("--out", type=Path, default=Path.home() / "runs" / "c1")
     ap.add_argument("--smoke", action="store_true", help="tiny model, for a wiring check")
+    ap.add_argument(
+        "--resume",
+        nargs="?",
+        const="auto",
+        default=None,
+        help="resume from a checkpoint; bare --resume picks up <out>/last.pt",
+    )
     args = ap.parse_args(argv)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -132,12 +139,32 @@ def main(argv: list[str]) -> int:
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(1)
     best = -np.inf
     log: list[dict[str, float]] = []
+    start_step = 0
+
+    if args.resume is not None:
+        resume_path = args.out / "last.pt" if args.resume == "auto" else Path(args.resume)
+        if not resume_path.exists():
+            print(f"missing {resume_path}; nothing to resume from")
+            return 2
+        extra = trainer.load(resume_path)
+        start_step = trainer.step
+        best = float(extra.get("val_si_sdri", -np.inf))
+        log_path = args.out / "log.json"
+        if log_path.exists():
+            log = json.loads(log_path.read_text())
+        print(f"resumed {resume_path.name} at step {start_step}, best dev {best:+.2f} dB\n")
+
     t0 = time.perf_counter()
 
-    for step in range(args.steps):
+    for step in range(start_step, args.steps):
+        # Seeded per step rather than from one long-lived generator, so a
+        # resumed run draws the batches that step would have drawn instead of
+        # replaying the first ones. A stream generator would need its position
+        # checkpointed too, and getting that subtly wrong shows up as quiet
+        # over-training on a prefix of the data rather than as a failure.
+        rng = np.random.default_rng([1, step])
         picks = rng.integers(0, len(train_ds), size=args.batch * args.grad_accum).tolist()
         batches = make_batches(train_ds, picks, args.batch)
         result = trainer.train_step(batches)
@@ -147,7 +174,7 @@ def main(argv: list[str]) -> int:
             print(
                 f"  step {step:6d}  loss {result.loss:8.3f}  "
                 f"sisdr {result.terms['sisdr']:7.2f}  "
-                f"lr {result.lr:.2e}  {elapsed / (step + 1):.2f}s/step",
+                f"lr {result.lr:.2e}  {elapsed / (step - start_step + 1):.2f}s/step",
                 flush=True,
             )
 
@@ -165,6 +192,11 @@ def main(argv: list[str]) -> int:
                 flush=True,
             )
             (args.out / "log.json").write_text(json.dumps(log, indent=2), encoding="utf-8")
+            # `last.pt` tracks the newest step, not the best score, and that is
+            # the difference that makes it a resume point: a run whose
+            # validation has not improved for 8000 steps still has 8000 steps
+            # of progress to lose. 45 MB, overwritten in place.
+            trainer.save(args.out / "last.pt", {"val_si_sdri": best})
 
     trainer.save(args.out / "last.pt", {"val_si_sdri": best})
     trainer.write_history(args.out / "history.json")
