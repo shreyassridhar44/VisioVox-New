@@ -61,7 +61,12 @@ class Transcript:
         return " ".join(s.text.strip() for s in self.segments).strip()
 
     def to_vtt(self) -> str:
-        """WebVTT for the player. Timestamps derive from integer ms, not floats."""
+        """WebVTT for download and for the HLS subtitle renditions.
+
+        Not what the player reads. VTT cannot carry word timings cleanly, and
+        word timings are what click-to-seek and per-word confidence need — so
+        the runtime format is `to_json` below and this is an export.
+        """
         lines = ["WEBVTT", ""]
         for i, seg in enumerate(self.segments, start=1):
             lines.append(str(i))
@@ -69,6 +74,39 @@ class Transcript:
             lines.append(seg.text.strip())
             lines.append("")
         return "\n".join(lines)
+
+    def to_json(self) -> dict[str, Any]:
+        """The word-timed form the player indexes (docs/12 §5).
+
+        Read by `apps/web/src/lib/playback/captions.ts`, whose parser skips any
+        segment missing `text`, `start_ms` or `end_ms` — so those three keys are
+        the contract and the rest is additive. `probability` is carried per word
+        because the player dims low-confidence words rather than hiding the
+        uncertainty, which is the same disclosure principle as the per-segment
+        confidence in the manifest.
+        """
+        return {
+            "language": self.language,
+            "language_probability": self.language_probability,
+            "segments": [
+                {
+                    "text": seg.text,
+                    "start_ms": seg.start_ms,
+                    "end_ms": seg.end_ms,
+                    "no_speech_prob": seg.no_speech_prob,
+                    "words": [
+                        {
+                            "text": w.text,
+                            "start_ms": w.start_ms,
+                            "end_ms": w.end_ms,
+                            "probability": w.probability,
+                        }
+                        for w in seg.words
+                    ],
+                }
+                for seg in self.segments
+            ],
+        }
 
 
 def _vtt_time(ms: int) -> str:
