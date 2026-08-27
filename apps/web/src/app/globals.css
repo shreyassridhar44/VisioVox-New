@@ -153,3 +153,177 @@ th {
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
 }
+
+/* ---------------------------------------------------------------- player --
+   The speaker rail is the product's one irreducible interaction, so it gets
+   the affordances: a real focus ring, a selected state legible without
+   colour alone, and hit targets big enough to be worth clicking. */
+
+.stage {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.stage-video,
+.stage-audio-only video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+}
+
+.stage-audio-only {
+  padding: 1rem;
+}
+
+.rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.6rem;
+}
+
+.rail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.6rem;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.rail-item:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.rail-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.rail-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.rail-face {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #0d1117;
+}
+
+.rail-face-none {
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
+.rail-label {
+  font-weight: 550;
+  font-size: 0.9rem;
+}
+
+.rail-meta {
+  font-size: 0.75rem;
+}
+
+.captions {
+  margin: 0;
+  min-height: 3.2rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.captions-idle {
+  font-size: 0.9rem;
+}
+
+.word {
+  display: inline;
+  padding: 0 0.06em;
+  margin: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.word:hover {
+  text-decoration: underline;
+}
+
+.word-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.word:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.player-controls {
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.seg button {
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+}
+
+.seg .seg-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.offset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.offset output {
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5rem;
+}
+
+.drift {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar > span {
+    transition: none;
+  }
+}

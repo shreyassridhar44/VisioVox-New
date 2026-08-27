@@ -4,6 +4,8 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { JobResponse, ProjectResponse } from '@visiovox/ts-client';
 import { api } from '@/lib/store';
+import { Player } from '@/components/Player';
+import type { Manifest } from '@/lib/playback/manifest';
 
 interface Progress {
   status: string;
@@ -19,6 +21,7 @@ export default function ProjectPage() {
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [job, setJob] = useState<JobResponse | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [manifest, setManifest] = useState<Manifest | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,6 +63,25 @@ export default function ProjectPage() {
     };
   }, [projectId]);
 
+  // The manifest carries signed URLs with an expiry, so it is fetched once the
+  // project reaches `ready` rather than alongside the project record — there is
+  // no point holding URLs that lapse before anyone presses play.
+  useEffect(() => {
+    if (project?.status !== 'ready') return;
+    let cancelled = false;
+    void api()
+      .getManifest(projectId)
+      .then((body) => {
+        if (!cancelled) setManifest(body as Manifest);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load manifest');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, project?.status]);
+
   if (error !== null) return <p className="error">{error}</p>;
   if (!project) return <p className="muted">Loading…</p>;
 
@@ -94,6 +116,8 @@ export default function ProjectPage() {
           </ul>
         )}
       </div>
+
+      {manifest !== null && <Player manifest={manifest} />}
 
       {job && (
         <div className="panel">
