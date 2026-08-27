@@ -154,3 +154,50 @@ def test_traversal_cannot_escape_the_prefix() -> None:
         key = object_key("usr_A", "prj_B", hostile)
         assert key.count("u/usr_A/p/prj_B/source/") == 1
         assert ".." not in key
+
+
+def test_short_project_gets_the_webaudio_hint() -> None:
+    manifest = build_manifest("prj_01HX8ZQ3M7N4P5R6S7T8V9W0XY", 5 * 60 * 1000)
+    assert manifest["playback_hint"] == "webaudio"
+    # No playlists, because there is nothing to stream from and advertising
+    # URLs that were never packaged is worse than omitting them.
+    assert "master_playlist" not in manifest
+
+
+def test_long_project_gets_the_hls_hint_and_the_playlists() -> None:
+    """The mock has to be able to produce a streaming project.
+
+    Hardcoding "webaudio" left the HLS engine unexercised by the entire
+    application track, and would have told the client to decode a 45-minute
+    recording into memory the first time anyone uploaded one.
+    """
+    manifest = build_manifest("prj_01HX8ZQ3M7N4P5R6S7T8V9W0XZ", 45 * 60 * 1000)
+    assert manifest["playback_hint"] == "hls"
+    assert "master_playlist" in manifest
+
+    mixed = manifest["mixed"]
+    assert isinstance(mixed, dict)
+    assert "hls" in mixed
+
+    speakers = manifest["speakers"]
+    assert isinstance(speakers, list)
+    for speaker in speakers:
+        audio = speaker["audio"]
+        assert isinstance(audio, dict)
+        assert "hls" in audio, "every rendition the player can select must exist"
+
+
+def test_engine_hint_follows_the_server_policy_not_a_local_copy() -> None:
+    """Guards the import in `mock_pipeline`, which is the whole point of it.
+
+    If the mock ever grows its own thresholds, this drifts from `choose_engine`
+    silently — and a client told the wrong engine either stutters or exhausts
+    memory, neither of which looks like a manifest bug.
+    """
+    from pipeline.s9_hls import WEBAUDIO_MAX_DURATION_MS, choose_engine
+
+    for duration in (60_000, WEBAUDIO_MAX_DURATION_MS, WEBAUDIO_MAX_DURATION_MS + 1, 7_200_000):
+        manifest = build_manifest("prj_01HX8ZQ3M7N4P5R6S7T8V9W0XY", duration)
+        speakers = manifest["speakers"]
+        assert isinstance(speakers, list)
+        assert manifest["playback_hint"] == choose_engine(duration, len(speakers) + 1)

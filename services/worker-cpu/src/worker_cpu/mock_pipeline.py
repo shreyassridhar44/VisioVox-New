@@ -24,6 +24,11 @@ import random
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+# The engine decision is imported rather than restated. docs/12 §2 puts it
+# server-side so the thresholds exist once; a mock with its own copy would be a
+# second place for them to drift, which is the failure the rule exists to stop.
+from pipeline.s9_hls import choose_engine
+
 STAGES: tuple[tuple[str, int, float], ...] = (
     # (stage, ordinal, share of total runtime)
     ("S0_ingest", 0, 0.04),
@@ -163,10 +168,26 @@ def build_manifest(
         "difficulty": "easy" if overlap < 0.10 and n <= 2 else ("moderate" if n <= 3 else "hard"),
         "speakers": speakers,
         "mixed": {"audio_url": f"{base_url}mixed.m4a"},
-        "playback_hint": "webaudio",
+        # The real S9 policy, not a hardcoded value. A mock that always said
+        # "webaudio" would leave the HLS engine unexercised by the whole
+        # application track, and would tell the client to decode a two-hour
+        # recording into memory the first time someone uploaded one.
+        "playback_hint": choose_engine(duration_ms, n + 1),
         "warnings": warnings,
         "signed_until": signed_until,
     }
+    if manifest["playback_hint"] == "hls":
+        # Streaming needs somewhere to stream from, and the schema treats these
+        # as optional precisely because a WebAudio project has no playlists.
+        manifest["master_playlist"] = f"{base_url}hls/master.m3u8"
+        manifest["mixed"] = {
+            "audio_url": f"{base_url}mixed.m4a",
+            "hls": f"{base_url}hls/audio/mixed.m3u8",
+        }
+        for speaker in speakers:
+            audio = speaker["audio"]
+            assert isinstance(audio, dict)
+            audio["hls"] = f"{base_url}hls/audio/spk_{speaker['ordinal']}.m3u8"
     if has_video:
         manifest["video"] = {"url": f"{base_url}video.mp4", "width": 1920, "height": 1080}
     return manifest
