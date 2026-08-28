@@ -5,7 +5,7 @@ PNPM    := pnpm
 
 .DEFAULT_GOAL := help
 .PHONY: help dev dev-down dev-logs lint fmt typecheck test test-gpu \
-        eval-quick smoke check install clean
+        eval-quick smoke check install clean train-status
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -71,6 +71,9 @@ datasets:  ## Resume dataset acquisition and generation in the background
 
 datasets-status:  ## Show dataset acquisition progress
 	@bash scripts/dataset-status.sh
+
+train-status:  ## Show C1 training progress: step, pace, validation curve, ETA
+	@$(UV) run python scripts/train_status.py
 
 web-build:  ## Production build of the Next.js app (also typechecks and lints it)
 	$(PNPM) --filter @visiovox/web run build
