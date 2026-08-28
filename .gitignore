@@ -159,3 +159,8 @@ tmp/
 # Derived from Libri3Mix, so they rebuild from the dataset rather than living
 # in the repository; about two minutes on CPU.
 /apps/web/public/fixtures/
+
+# Playwright run artefacts
+/test-results/
+/playwright-report/
+/blob-report/

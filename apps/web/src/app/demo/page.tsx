@@ -21,6 +21,26 @@ import type { Manifest, PlaybackHint } from '@/lib/playback/manifest';
 const FIXTURE = '/fixtures/manifest.json';
 const GENERATE = 'uv run python scripts/make_player_fixtures.py';
 
+/**
+ * Point the fixture's absolute URLs at whoever is serving this page.
+ *
+ * The manifest is generated with a baked-in base URL because the contract
+ * requires absolute URIs — a real manifest carries signed CDN links. That
+ * would tie the demo to one port, so the fixture (and only the fixture) is
+ * retargeted on load, which lets `pnpm dev` on 3000 and the Playwright suite
+ * on 3210 read the same file.
+ */
+function retarget<T>(value: T, origin: string): T {
+  if (typeof value === 'string') {
+    return value.replace(/^https?:\/\/[^/]+\/fixtures\//, `${origin}/fixtures/`) as T;
+  }
+  if (Array.isArray(value)) return value.map((v: unknown) => retarget(v, origin)) as T;
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, retarget(v, origin)])) as T;
+  }
+  return value;
+}
+
 type Load = { state: 'loading' } | { state: 'missing' } | { state: 'ready'; manifest: Manifest };
 
 export default function DemoPage() {
@@ -34,7 +54,7 @@ export default function DemoPage() {
     void fetch(FIXTURE)
       .then(async (response) => {
         if (!response.ok) throw new Error('no fixtures');
-        const manifest = (await response.json()) as Manifest;
+        const manifest = retarget((await response.json()) as Manifest, window.location.origin);
         if (!cancelled) setLoad({ state: 'ready', manifest });
       })
       .catch(() => {
