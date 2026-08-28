@@ -150,20 +150,35 @@ test.describe('captions', () => {
   });
 
   test('follow the selected speaker', async ({ page }) => {
+    // The instant has to be chosen, not assumed. In a real meeting only about
+    // a tenth of the time has two people talking at once, so a hardcoded
+    // timestamp mostly finds two silences and proves nothing — which is what
+    // an earlier version of this test did.
+    const a = readCaptions('s1');
+    const b = readCaptions('s2');
+    let moment: number | null = null;
+    for (let ms = 500; ms < 115_000 && moment === null; ms += 250) {
+      const segA = segmentAt(a, ms);
+      const segB = segmentAt(b, ms);
+      if (segA !== null && segB !== null && segA.text.trim() !== segB.text.trim()) moment = ms;
+    }
+    test.skip(moment === null, 'fixture has no instant with two speakers talking at once');
+
     await openDemo(page, 'WebAudio');
-    await page.evaluate(() => {
+    await page.evaluate((ms) => {
       const video = document.querySelector('video');
-      if (video !== null) video.currentTime = 3;
-    });
-    await page.waitForTimeout(250);
-    const first = await page.locator('.captions').first().textContent();
-
-    await page.getByRole('radio', { name: /Speaker 3/ }).click();
+      if (video !== null) video.currentTime = ms / 1000;
+    }, moment ?? 0);
     await page.waitForTimeout(300);
-    const second = await page.locator('.captions').first().textContent();
+    const first = ((await page.locator('.captions').first().textContent()) ?? '').trim();
 
-    // Three different people reading three different passages: the caption
-    // must change with the selection, or captions are not speaker-scoped.
+    await page.getByRole('radio', { name: /Speaker 2/ }).click();
+    await page.waitForTimeout(300);
+    const second = ((await page.locator('.captions').first().textContent()) ?? '').trim();
+
+    // Two people saying different things at the same instant: the caption must
+    // change with the selection, or captions are not speaker-scoped at all.
+    expect(first).not.toBe('');
     expect(second).not.toBe(first);
   });
 });

@@ -8,10 +8,11 @@
  * Here it loads real AAC, crossfades real speech and renders real transcripts,
  * which is the only way to find out whether it actually works.
  *
- * The fixture is a genuine Libri3Mix mixture and its true isolated sources, so
- * what you hear when you pick a speaker is what a perfect extractor would
- * return. That makes it a target rather than a mock — and when SEAVE has a
- * checkpoint, pointing this page at real output is a direct comparison.
+ * The fixture is real recorded material with its true isolated sources — by
+ * default an AMI meeting, where the sources are the participants' own headset
+ * microphones. So what you hear when you pick a speaker is what a perfect
+ * extractor would return: a target rather than a mock, and a direct comparison
+ * once SEAVE has a checkpoint to point this page at.
  */
 
 import { useEffect, useState } from 'react';
@@ -42,6 +43,49 @@ function retarget<T>(value: T, origin: string): T {
 }
 
 type Load = { state: 'loading' } | { state: 'missing' } | { state: 'ready'; manifest: Manifest };
+
+/**
+ * Describe the fixture that actually loaded, rather than the one that was
+ * loaded when this copy was written. The generator can emit either an AMI
+ * meeting or a Libri3Mix clip, and prose that quietly describes the wrong one
+ * is how a demo starts lying about itself.
+ */
+function FixtureNotes({ manifest }: { readonly manifest: Manifest }): React.JSX.Element {
+  const meeting = manifest.speakers.some((s) => s.modality === 'audiovisual');
+  const minutes = Math.round(manifest.duration_ms / 1000);
+  const overlap = manifest.overlap_ratio;
+
+  return (
+    <div className="panel stack">
+      <h2 style={{ margin: 0, fontSize: '1rem' }}>What you are listening to</h2>
+      {meeting ? (
+        <>
+          <p className="muted">
+            {String(manifest.speakers.length)} people in a real recorded meeting — {String(minutes)}{' '}
+            seconds from the AMI corpus, the in-domain evaluation set this project is judged on.
+            They talk over each other{' '}
+            {overlap !== undefined ? `about ${String(Math.round(overlap * 100))}% of the time` : ''}
+            . The rail shows each person&rsquo;s own camera; the video is their four closeups tiled.
+          </p>
+          <p className="muted">
+            The isolated tracks are the participants&rsquo; own headset microphones, not SEAVE
+            output. That makes this the target rather than a mock — headsets are the ground truth
+            the model is scored against, and the same page will show real output once C1 produces a
+            checkpoint. Some bleed between headsets is audible, which is exactly why meeting audio
+            is the hard case.
+          </p>
+        </>
+      ) : (
+        <p className="muted">
+          A Libri3Mix mixture with its true isolated sources, loudness-normalised to −16 LUFS and
+          packaged exactly as S9 will package model output. The video is a test pattern with a
+          running timestamp, so A/V sync can be checked by eye — there are no faces in it, which is
+          why the speakers are marked audio-only.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function DemoPage() {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
@@ -75,8 +119,8 @@ export default function DemoPage() {
           <span className="badge">fixture</span>
         </div>
         <p className="muted">
-          Three people talking over each other. Pick one and you hear only them, with the picture
-          still in step and captions that follow whoever is selected.
+          People talking over each other. Pick one and you hear only them, with the picture still in
+          step and captions that follow whoever is selected.
         </p>
       </div>
 
@@ -116,20 +160,7 @@ export default function DemoPage() {
             </button>
           </div>
           <Player key={engine} manifest={load.manifest} forceEngine={engine} />
-          <div className="panel stack">
-            <h2 style={{ margin: 0, fontSize: '1rem' }}>What you are listening to</h2>
-            <p className="muted">
-              A real Libri3Mix mixture with its three true isolated sources, loudness-normalised to
-              −16 LUFS and packaged exactly as S9 will package model output. The isolated tracks are
-              ground truth, not SEAVE output — this shows the target, and the same page will show
-              the real thing once C1 produces a checkpoint.
-            </p>
-            <p className="muted">
-              The video is a test pattern with a running timestamp, so A/V sync can be checked by
-              eye. There are no faces in it, which is why the speakers are marked audio-only and the
-              rail shows numbered chips rather than thumbnails.
-            </p>
-          </div>
+          <FixtureNotes manifest={load.manifest} />
         </>
       )}
     </div>
