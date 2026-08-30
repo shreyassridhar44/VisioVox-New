@@ -28,10 +28,12 @@ import sys
 from pathlib import Path
 
 GATE_DB = 13.0
-TOTAL_STEPS = 20_000
+TOTAL_STEPS = 20_000  # only a fallback; the run states its own length
 BLOCKS = "▁▂▃▄▅▆▇█"
 
 STEP_LINE = re.compile(r"^\s*step\s+(\d+).*?([\d.]+)s/step")
+# The banner `train_c1` prints on start: "device=cuda params=5.0M batch=8x2 steps=60000".
+BANNER_STEPS = re.compile(r"\bsteps=(\d+)")
 
 
 def sparkline(values: list[float]) -> str:
@@ -55,7 +57,10 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run", type=Path, default=Path.home() / "runs" / "c1")
     ap.add_argument("--log", type=Path, default=Path.home() / "logs" / "c1.log")
-    ap.add_argument("--steps", type=int, default=TOTAL_STEPS)
+    # Read from the run's own banner by default. Passing the wrong total is
+    # worse than tedious: every percentage, ETA and projection is computed
+    # against it, so a stale value reports a run as further along than it is.
+    ap.add_argument("--steps", type=int, default=None)
     ap.add_argument("--gate", type=float, default=GATE_DB)
     ap.add_argument("--tail", type=int, default=14, help="validations to plot")
     args = ap.parse_args(argv)
@@ -65,21 +70,25 @@ def main(argv: list[str]) -> int:
         print(f"no log at {log_path}")
         return 2
 
-    step, rate = 0, 0.0
+    step, rate, declared = 0, 0.0, None
     for line in log_path.read_text(errors="replace").splitlines():
         m = STEP_LINE.match(line)
         if m:
             step, rate = int(m.group(1)), float(m.group(2))
+        banner = BANNER_STEPS.search(line)
+        if banner:
+            declared = int(banner.group(1))
 
+    total: int = args.steps if args.steps is not None else (declared or TOTAL_STEPS)
     alive = running()
     written = dt.datetime.fromtimestamp(log_path.stat().st_mtime)
     stale = (dt.datetime.now() - written).total_seconds()
 
     print(f"  state    {'running' if alive else 'NOT RUNNING'}")
-    print(f"  step     {step:,} / {args.steps:,}   ({step / args.steps:.1%})")
+    print(f"  step     {step:,} / {total:,}   ({step / total:.1%})")
     if rate > 0:
         done = (step + 1) * rate
-        left = (args.steps - step) * rate
+        left = (total - step) * rate
         eta = dt.datetime.now() + dt.timedelta(seconds=left)
         print(f"  pace     {rate:.2f} s/step")
         print(f"  elapsed  {done / 3600:.1f} h        remaining {left / 3600:.1f} h")
@@ -110,10 +119,10 @@ def main(argv: list[str]) -> int:
         last_s, last_v = recent[-1]
         if last_s > first_s:
             slope = (last_v - first_v) / (last_s - first_s)
-            projected = last_v + slope * (args.steps - last_s)
+            projected = last_v + slope * (total - last_s)
             print(f"  trend         {slope * 1000:+.2f} dB / 1000 steps since step {first_s:,}")
             verdict = "on track" if projected >= args.gate else "short of the gate"
-            print(f"  straight-line {projected:+.1f} dB at step {args.steps:,} — {verdict}")
+            print(f"  straight-line {projected:+.1f} dB at step {total:,} — {verdict}")
             print("                (naive: these curves usually steepen, so treat as a prompt)")
 
     checkpoints = sorted(p.name for p in args.run.glob("*.pt"))
