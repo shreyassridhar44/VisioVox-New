@@ -39,13 +39,21 @@ class SeaveConfig:
     n_fft: int = 512
     hop: int = 128
     n_blocks: int = 6
-    # docs/07 §2 specifies emb_dim 128 with batch 8. Measured on the A5000
-    # that needs 47 GB even with gradient checkpointing, and 24 GB is what
-    # exists — WSL will page the excess to system RAM rather than fail,
-    # which trains at a fraction of the speed while looking like it works.
-    # 96 at batch 4 peaks at 17.2 GB, and grad_accum 4 restores the
-    # documented effective batch of 16.
-    emb_dim: int = 96
+    # docs/07 §2 specifies emb_dim 128 with batch 8, and that is what fits.
+    #
+    # An earlier revision cut this to 96 and the batch to 4, on the belief that
+    # 128 needed 47 GB with checkpointing against the A5000's 24 GB. Measured
+    # by `scripts/bench_train.py`, 128 at batch 8 with checkpointing peaks at
+    # 18.8 GB and 96 at batch 4 peaks at 8.9 GB — so the estimate was out by
+    # about 2.5x, and C1 ran for 52 hours as the smallest and slowest viable
+    # configuration with half the card idle.
+    #
+    # The mistake was easy to make and hard to see, because WSL does not raise
+    # when a working set overflows: it pages to system RAM and keeps training
+    # at a fifteenth of the speed. An overcommitted configuration therefore
+    # looks slow rather than impossible, which is why the guard in the
+    # benchmark aborts on overflow instead of timing it.
+    emb_dim: int = 128
     lstm_hidden: int = 128
     attn_heads: int = 4
     speaker_emb_dim: int = 192

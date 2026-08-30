@@ -16,6 +16,7 @@ import pytest
 import soundfile as sf
 
 from training.librimix_data import (
+    CLEAN,
     FRAME_SAMPLES,
     RATE,
     Libri2MixDataset,
@@ -201,3 +202,95 @@ def test_short_clips_are_padded(tmp_path: Path) -> None:
     ds = Libri2MixDataset(split, npz, LibriMixConfig(chunk_seconds=10.0, seed=0))
     item = ds.sample(0)
     assert len(item.target) == int(10.0 * RATE)
+
+
+# --------------------------------------------------------------------------
+# the noise-free curriculum condition
+# --------------------------------------------------------------------------
+
+
+def _add_noise_to_mixtures(split: Path, level: float = 0.1) -> None:
+    """Make mix_both genuinely noisy.
+
+    `_build_split` writes mix_both as s1 + s2, which is fine for the tests
+    above but would make the clean condition indistinguishable from it — and a
+    curriculum that trains twice on the same signal is not a curriculum.
+    """
+    rng = np.random.default_rng(7)
+    for path in sorted((split / "mix_both").glob("*.wav")):
+        audio, rate = sf.read(path, dtype="float32")
+        noise = rng.standard_normal(audio.shape).astype(np.float32) * level
+        sf.write(path, audio + noise, rate)
+
+
+def test_clean_mixture_is_the_sum_of_the_sources(tmp_path: Path) -> None:
+    """The noise-free condition costs an add, not a dataset.
+
+    Libri2Mix here was generated with `--types mix_both`, so no mix_clean
+    directory exists on disk. For two speakers the clean mixture is exactly
+    s1 + s2, and both sources are already there — which is what makes the
+    curriculum free rather than a regeneration job.
+    """
+    split, npz = _build_split(tmp_path)
+    _add_noise_to_mixtures(split)
+    cfg = LibriMixConfig(chunk_seconds=2.0, seed=0, mixture_type=CLEAN)
+
+    item = Libri2MixDataset(split, npz, cfg).sample(0)
+    np.testing.assert_allclose(item.mixture, item.target + item.interferer, rtol=0, atol=1e-6)
+
+
+def test_clean_is_a_different_signal_from_mix_both(tmp_path: Path) -> None:
+    split, npz = _build_split(tmp_path)
+    _add_noise_to_mixtures(split)
+
+    clean = Libri2MixDataset(
+        split, npz, LibriMixConfig(chunk_seconds=2.0, seed=0, mixture_type=CLEAN)
+    ).sample(0)
+    noisy = Libri2MixDataset(split, npz, LibriMixConfig(chunk_seconds=2.0, seed=0)).sample(0)
+
+    assert not np.allclose(clean.mixture, noisy.mixture, atol=1e-3)
+
+
+def test_only_the_mixture_changes_between_conditions(tmp_path: Path) -> None:
+    """Target, interferer and enrolment must be identical across the switch.
+
+    If the curriculum moved the target as well, the two stages would be
+    optimising different objectives, and the changeover would read as training
+    instability rather than as a change of input.
+    """
+    split, npz = _build_split(tmp_path)
+    _add_noise_to_mixtures(split)
+
+    clean = Libri2MixDataset(
+        split, npz, LibriMixConfig(chunk_seconds=2.0, seed=0, mixture_type=CLEAN)
+    ).sample(3)
+    noisy = Libri2MixDataset(split, npz, LibriMixConfig(chunk_seconds=2.0, seed=0)).sample(3)
+
+    np.testing.assert_array_equal(clean.target, noisy.target)
+    np.testing.assert_array_equal(clean.interferer, noisy.interferer)
+    np.testing.assert_array_equal(clean.enrolment, noisy.enrolment)
+    assert clean.target_speaker == noisy.target_speaker
+
+
+def test_clean_condition_is_easier_than_the_noisy_one(tmp_path: Path) -> None:
+    """The premise of the curriculum, stated as a measurement.
+
+    Returning the mixture unchanged scores better against the target when there
+    is no noise in it. If that were not true the ordering would be arbitrary.
+    """
+    split, npz = _build_split(tmp_path)
+    _add_noise_to_mixtures(split, level=0.3)
+
+    def passthrough_si_sdr(mixture_type: str) -> float:
+        cfg = LibriMixConfig(chunk_seconds=2.0, seed=0, mixture_type=mixture_type)
+        ds = Libri2MixDataset(split, npz, cfg)
+        scores = []
+        for i in range(8):
+            item = ds.sample(i)
+            err = item.mixture - item.target
+            scores.append(
+                10 * np.log10(float(np.sum(item.target**2)) / (float(np.sum(err**2)) + 1e-12))
+            )
+        return float(np.mean(scores))
+
+    assert passthrough_si_sdr(CLEAN) > passthrough_si_sdr("mix_both")

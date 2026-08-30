@@ -31,7 +31,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
 from models.seave import Seave, SeaveConfig
-from training.librimix_data import Libri2MixDataset, LibriMixConfig, to_batch_dict
+from training.librimix_data import CLEAN, Libri2MixDataset, LibriMixConfig, to_batch_dict
 from training.losses import LossWeights, si_sdr
 from training.trainer import TrainConfig, Trainer
 
@@ -86,9 +86,18 @@ def validate(
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--steps", type=int, default=20000)
-    ap.add_argument("--batch", type=int, default=4)
-    ap.add_argument("--grad-accum", type=int, default=4)
+    # Batch 8 with two accumulation passes, not 4 with four. Same effective
+    # batch of 16, 2.5x the throughput: four sequential passes over a quarter
+    # of the card is the slowest way to reach 16 (scripts/bench_train.py).
+    ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--grad-accum", type=int, default=2)
     ap.add_argument("--lr", type=float, default=1.5e-4)
+    ap.add_argument(
+        "--clean-fraction",
+        type=float,
+        default=0.35,
+        help="portion of the run trained on noise-free mixtures before WHAM! is added",
+    )
     ap.add_argument("--val-every", type=int, default=500)
     ap.add_argument("--val-items", type=int, default=200)
     ap.add_argument("--chunk-seconds", type=float, default=4.0)
@@ -110,10 +119,25 @@ def main(argv: list[str]) -> int:
             print(f"missing {p}; run scripts/precompute_enrolment.py first")
             return 2
 
-    mix_cfg = LibriMixConfig(chunk_seconds=args.chunk_seconds, seed=0)
-    train_ds = Libri2MixDataset(ROOT / "train-100", train_npz, mix_cfg)
-    dev_ds = Libri2MixDataset(ROOT / "dev", dev_npz, mix_cfg)
+    # Two views of the same training set. The first half of the run sees the
+    # sources summed with no noise; the rest sees the WHAM!-corrupted mixtures
+    # the product actually has to cope with. Separating two voices *and*
+    # denoising is a strictly harder problem than separating two voices, and
+    # the first C1 run spent all 11.5 of its epochs on the harder one.
+    #
+    # Validation stays on mix_both throughout, so the reported number never
+    # flatters itself: the curriculum changes what the model is shown, not
+    # what it is judged on.
+    noisy_cfg = LibriMixConfig(chunk_seconds=args.chunk_seconds, seed=0)
+    clean_cfg = LibriMixConfig(chunk_seconds=args.chunk_seconds, seed=0, mixture_type=CLEAN)
+    train_noisy = Libri2MixDataset(ROOT / "train-100", train_npz, noisy_cfg)
+    train_clean = Libri2MixDataset(ROOT / "train-100", train_npz, clean_cfg)
+    dev_ds = Libri2MixDataset(ROOT / "dev", dev_npz, noisy_cfg)
+    clean_until = int(args.steps * args.clean_fraction)
+    train_ds = train_clean if clean_until > 0 else train_noisy
     print(f"train {len(train_ds)} items, dev {len(dev_ds)} items")
+    if clean_until > 0:
+        print(f"  curriculum: noise-free until step {clean_until:,}, then mix_both")
     if train_ds.skipped_single_clip_speakers:
         print(f"  {train_ds.skipped_single_clip_speakers} speakers skipped (single clip)")
 
@@ -165,6 +189,10 @@ def main(argv: list[str]) -> int:
         # checkpointed too, and getting that subtly wrong shows up as quiet
         # over-training on a prefix of the data rather than as a failure.
         rng = np.random.default_rng([1, step])
+        stage = train_clean if step < clean_until else train_noisy
+        if stage is not train_ds:
+            train_ds = stage
+            print(f"  -- switching to mix_both at step {step:,} --", flush=True)
         picks = rng.integers(0, len(train_ds), size=args.batch * args.grad_accum).tolist()
         batches = make_batches(train_ds, picks, args.batch)
         result = trainer.train_step(batches)

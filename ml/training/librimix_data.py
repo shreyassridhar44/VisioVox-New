@@ -25,13 +25,25 @@ import soundfile as sf
 RATE = 16_000
 FRAME_SAMPLES = 640  # 25 fps grid, matching the audio-visual path
 
+#: `mixture_type` value meaning "sum the sources" rather than "read a directory".
+CLEAN = "clean"
+
 
 @dataclass(frozen=True)
 class LibriMixConfig:
     chunk_seconds: float = 4.0
     seed: int | None = None
-    # Where the mixture comes from. mix_both includes WHAM! noise; mix_clean
-    # is speech only. C1 trains on mix_both because real uploads are noisy.
+    # Where the mixture comes from. `mix_both` includes WHAM! noise, which is
+    # what C1 must ultimately handle because real uploads are noisy.
+    #
+    # `clean` is a special case: instead of reading a directory it sums the two
+    # sources. Libri2Mix here was generated with `--types mix_both`, so no
+    # mix_clean exists on disk — but s1 and s2 do, and for two speakers the
+    # clean mixture is exactly their sum. That makes the noise-free condition
+    # free to obtain, which matters because it is the useful first half of a
+    # curriculum: separating two voices while also denoising is a strictly
+    # harder problem than separating two voices, and the first C1 run spent
+    # every one of its epochs on the harder one.
     mixture_type: str = "mix_both"
 
 
@@ -121,10 +133,16 @@ class Libri2MixDataset:
         rng = random.Random((self.cfg.seed or 0) + index)
         mixture_id, slot = self.items[index % len(self.items)]
 
-        mixture, _ = sf.read(self.dir / self.cfg.mixture_type / mixture_id, dtype="float32")
         target, _ = sf.read(self.dir / f"s{slot}" / mixture_id, dtype="float32")
         other_slot = 2 if slot == 1 else 1
         interferer, _ = sf.read(self.dir / f"s{other_slot}" / mixture_id, dtype="float32")
+
+        if self.cfg.mixture_type == CLEAN:
+            # Summed rather than read. Identical to what LibriMix writes into
+            # mix_clean, and it costs one add instead of a third file read.
+            mixture = target + interferer
+        else:
+            mixture, _ = sf.read(self.dir / self.cfg.mixture_type / mixture_id, dtype="float32")
 
         mixture, target, interferer = self._chunk([mixture, target, interferer], rng)
 
