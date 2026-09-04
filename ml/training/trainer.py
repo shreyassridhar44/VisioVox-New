@@ -211,6 +211,33 @@ class Trainer:
         extra: dict[str, Any] = dict(checkpoint.get("extra") or {})
         return extra
 
+    def init_from(self, path: Path, strict: bool = True) -> list[str]:
+        """Load weights only — no optimiser state, no step counter.
+
+        Distinct from `load`, and the distinction is the point. `load` resumes
+        an interrupted run and must restore everything. This *starts* a run
+        from someone else's weights: the schedule begins at zero, the optimiser
+        moments begin empty, and only the parameters carry over.
+
+        Returns the names of parameters the checkpoint did not supply, which
+        stay randomly initialised. That list is the whole story when adapting a
+        foreign checkpoint — conditioning and output layers will not be in a
+        blind-separation model, and knowing exactly what was skipped is the
+        difference between a warm start and a silently half-random one.
+        """
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        weights = checkpoint.get("model", checkpoint)
+        own = self.model.state_dict()
+        usable = {k: v for k, v in weights.items() if k in own and own[k].shape == v.shape}
+        missing = sorted(set(own) - set(usable))
+        if strict and missing:
+            raise ValueError(
+                f"{len(missing)} parameters not supplied by {path.name}; "
+                f"pass strict=False to accept a partial init. First: {missing[:5]}"
+            )
+        self.model.load_state_dict(usable, strict=False)
+        return missing
+
     def write_history(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps([asdict(r) for r in self.history], indent=2), encoding="utf-8")

@@ -31,7 +31,13 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
 from models.seave import Seave, SeaveConfig
-from training.librimix_data import CLEAN, Libri2MixDataset, LibriMixConfig, to_batch_dict
+from training.librimix_data import (
+    CLEAN,
+    ConcatMixDataset,
+    Libri2MixDataset,
+    LibriMixConfig,
+    to_batch_dict,
+)
 from training.losses import LossWeights, si_sdr
 from training.trainer import TrainConfig, Trainer
 
@@ -39,13 +45,17 @@ ROOT = Path.home() / "data" / "Libri2Mix" / "Libri2Mix" / "wav16k" / "min"
 ENROL = Path.home() / "data" / "Libri2Mix" / "enrolment"
 GATE_DB = 13.0
 
+# Either a single split or several addressed as one. The trainer only ever
+# needs `len` and `sample`, so both satisfy it.
+MixSource = Libri2MixDataset | ConcatMixDataset
+
 
 def collate(items: list[dict[str, np.ndarray]]) -> dict[str, torch.Tensor]:
     return {k: torch.from_numpy(np.stack([i[k] for i in items])) for k in items[0]}
 
 
 def make_batches(
-    ds: Libri2MixDataset, indices: list[int], batch_size: int
+    ds: MixSource, indices: list[int], batch_size: int
 ) -> list[dict[str, torch.Tensor]]:
     out = []
     for start in range(0, len(indices), batch_size):
@@ -58,7 +68,7 @@ def make_batches(
 
 @torch.no_grad()
 def validate(
-    model: Seave, ds: Libri2MixDataset, n_items: int, batch_size: int, device: torch.device
+    model: Seave, ds: MixSource, n_items: int, batch_size: int, device: torch.device
 ) -> dict[str, float]:
     """SI-SDRi on held-out data, with the improvement over the mixture."""
     model.eval()
@@ -101,6 +111,10 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--val-every", type=int, default=500)
     ap.add_argument("--val-items", type=int, default=200)
     ap.add_argument("--chunk-seconds", type=float, default=4.0)
+    # train-100 alone was overfit: +9.28 dB on seen data against +5.28 on
+    # dev. train-360 is 3.7x the mixtures and already generated, so the
+    # default trains on both.
+    ap.add_argument("--splits", default="train-100,train-360")
     ap.add_argument("--out", type=Path, default=Path.home() / "runs" / "c1")
     ap.add_argument("--smoke", action="store_true", help="tiny model, for a wiring check")
     ap.add_argument(
@@ -109,6 +123,17 @@ def main(argv: list[str]) -> int:
         const="auto",
         default=None,
         help="resume from a checkpoint; bare --resume picks up <out>/last.pt",
+    )
+    ap.add_argument(
+        "--init-from",
+        type=Path,
+        default=None,
+        help="start from these weights with a fresh schedule (not a resume)",
+    )
+    ap.add_argument(
+        "--init-partial",
+        action="store_true",
+        help="allow --init-from to leave unmatched parameters randomly initialised",
     )
     args = ap.parse_args(argv)
 
@@ -130,12 +155,23 @@ def main(argv: list[str]) -> int:
     # what it is judged on.
     noisy_cfg = LibriMixConfig(chunk_seconds=args.chunk_seconds, seed=0)
     clean_cfg = LibriMixConfig(chunk_seconds=args.chunk_seconds, seed=0, mixture_type=CLEAN)
-    train_noisy = Libri2MixDataset(ROOT / "train-100", train_npz, noisy_cfg)
-    train_clean = Libri2MixDataset(ROOT / "train-100", train_npz, clean_cfg)
+
+    splits = [s.strip() for s in args.splits.split(",") if s.strip()]
+    missing = [s for s in splits if not (ENROL / f"{s}.npz").exists()]
+    if missing:
+        print(f"missing enrolment for {missing}; run scripts/precompute_enrolment.py --split ...")
+        return 2
+
+    train_noisy = ConcatMixDataset(
+        [Libri2MixDataset(ROOT / s, ENROL / f"{s}.npz", noisy_cfg) for s in splits]
+    )
+    train_clean = ConcatMixDataset(
+        [Libri2MixDataset(ROOT / s, ENROL / f"{s}.npz", clean_cfg) for s in splits]
+    )
     dev_ds = Libri2MixDataset(ROOT / "dev", dev_npz, noisy_cfg)
     clean_until = int(args.steps * args.clean_fraction)
     train_ds = train_clean if clean_until > 0 else train_noisy
-    print(f"train {len(train_ds)} items, dev {len(dev_ds)} items")
+    print(f"train {len(train_ds):,} items from {'+'.join(splits)}, dev {len(dev_ds):,} items")
     if clean_until > 0:
         print(f"  curriculum: noise-free until step {clean_until:,}, then mix_both")
     if train_ds.skipped_single_clip_speakers:
@@ -166,6 +202,14 @@ def main(argv: list[str]) -> int:
     best = -np.inf
     log: list[dict[str, float]] = []
     start_step = 0
+
+    if args.init_from is not None:
+        if args.resume is not None:
+            print("--init-from and --resume are mutually exclusive")
+            return 2
+        skipped = trainer.init_from(args.init_from, strict=not args.init_partial)
+        print(f"initialised from {args.init_from.name}, {len(skipped)} params left random")
+        print()
 
     if args.resume is not None:
         resume_path = args.out / "last.pt" if args.resume == "auto" else Path(args.resume)

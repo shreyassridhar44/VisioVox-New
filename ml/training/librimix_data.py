@@ -14,8 +14,10 @@ than quietly self-enrolled.
 
 from __future__ import annotations
 
+import bisect
 import random
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -178,3 +180,45 @@ def to_batch_dict(item: MixItem) -> dict[str, np.ndarray]:
         "active": item.active,
         "speaker_embedding": item.enrolment,
     }
+
+
+class ConcatMixDataset:
+    """Several Libri2Mix splits addressed as one.
+
+    C1 trained on train-100 alone and overfit it: measured on the finished
+    checkpoint, SI-SDRi was +9.28 dB on seen data against +5.28 dB on dev. A
+    4 dB generalisation gap says the ceiling was the size of the training set,
+    not the capacity of the model — so the fix is more speakers, and train-360
+    is 3.7x the mixtures of train-100 and already on disk.
+
+    Deliberately not `torch.utils.data.ConcatDataset`: the rest of this module
+    stays torch-free so the sampling logic can be tested without a GPU, and the
+    trainer only needs `len` and `sample`.
+    """
+
+    def __init__(self, parts: Sequence[Libri2MixDataset]) -> None:
+        if not parts:
+            raise ValueError("ConcatMixDataset needs at least one split")
+        self.parts = list(parts)
+        # Cumulative bounds, so routing an index is a bisect rather than a scan.
+        self.bounds: list[int] = []
+        total = 0
+        for part in self.parts:
+            total += len(part)
+            self.bounds.append(total)
+
+    def __len__(self) -> int:
+        return self.bounds[-1]
+
+    @property
+    def skipped_single_clip_speakers(self) -> int:
+        return sum(p.skipped_single_clip_speakers for p in self.parts)
+
+    def sample(self, index: int) -> MixItem:
+        position = index % len(self)
+        which = bisect.bisect_right(self.bounds, position)
+        offset = position - (self.bounds[which - 1] if which else 0)
+        return self.parts[which].sample(offset)
+
+    def __getitem__(self, index: int) -> MixItem:
+        return self.sample(index)

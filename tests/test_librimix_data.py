@@ -19,6 +19,7 @@ from training.librimix_data import (
     CLEAN,
     FRAME_SAMPLES,
     RATE,
+    ConcatMixDataset,
     Libri2MixDataset,
     LibriMixConfig,
     to_batch_dict,
@@ -294,3 +295,58 @@ def test_clean_condition_is_easier_than_the_noisy_one(tmp_path: Path) -> None:
         return float(np.mean(scores))
 
     assert passthrough_si_sdr(CLEAN) > passthrough_si_sdr("mix_both")
+
+
+# --------------------------------------------------------------------------
+# several splits addressed as one
+# --------------------------------------------------------------------------
+
+
+def test_concat_covers_every_item_of_every_part(tmp_path: Path) -> None:
+    a_split, a_npz = _build_split(tmp_path / "a")
+    b_split, b_npz = _build_split(tmp_path / "b", speakers=3)
+    cfg = LibriMixConfig(chunk_seconds=1.0, seed=0)
+    a = Libri2MixDataset(a_split, a_npz, cfg)
+    b = Libri2MixDataset(b_split, b_npz, cfg)
+
+    both = ConcatMixDataset([a, b])
+    assert len(both) == len(a) + len(b)
+
+    # Every index must resolve, and the halves must map onto the right part —
+    # an off-by-one in the bounds would silently train on one split twice.
+    assert both.sample(0).mixture_id == a.sample(0).mixture_id
+    assert both.sample(len(a)).mixture_id == b.sample(0).mixture_id
+    assert both.sample(len(both) - 1).mixture_id == b.sample(len(b) - 1).mixture_id
+
+
+def test_concat_routes_every_index_without_gaps(tmp_path: Path) -> None:
+    a_split, a_npz = _build_split(tmp_path / "a")
+    b_split, b_npz = _build_split(tmp_path / "b", speakers=3)
+    cfg = LibriMixConfig(chunk_seconds=1.0, seed=0)
+    parts = [Libri2MixDataset(a_split, a_npz, cfg), Libri2MixDataset(b_split, b_npz, cfg)]
+    both = ConcatMixDataset(parts)
+
+    seen = [both.sample(i).mixture_id for i in range(len(both))]
+    expected = [p.sample(i).mixture_id for p in parts for i in range(len(p))]
+    assert seen == expected
+
+
+def test_concat_wraps_out_of_range_indices(tmp_path: Path) -> None:
+    """The trainer draws indices with a generator, so wrapping must be safe."""
+    split, npz = _build_split(tmp_path)
+    both = ConcatMixDataset([Libri2MixDataset(split, npz, LibriMixConfig(chunk_seconds=1.0))])
+    assert both.sample(len(both)).mixture_id == both.sample(0).mixture_id
+
+
+def test_concat_rejects_an_empty_list() -> None:
+    with pytest.raises(ValueError, match="at least one split"):
+        ConcatMixDataset([])
+
+
+def test_concat_sums_skipped_speakers(tmp_path: Path) -> None:
+    a_split, a_npz = _build_split(tmp_path / "a")
+    b_split, b_npz = _build_split(tmp_path / "b", speakers=3)
+    cfg = LibriMixConfig(chunk_seconds=1.0)
+    parts = [Libri2MixDataset(a_split, a_npz, cfg), Libri2MixDataset(b_split, b_npz, cfg)]
+    both = ConcatMixDataset(parts)
+    assert both.skipped_single_clip_speakers == sum(p.skipped_single_clip_speakers for p in parts)
