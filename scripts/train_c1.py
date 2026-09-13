@@ -115,6 +115,16 @@ def main(argv: list[str]) -> int:
     # dev. train-360 is 3.7x the mixtures and already generated, so the
     # default trains on both.
     ap.add_argument("--splits", default="train-100,train-360")
+    # Loss weights, exposed because the finished C1 model is artefact-limited
+    # rather than interference-limited: SIR +20.4 dB against SAR +7.8 dB on
+    # test. Suppression has already reached its hinge; what caps SI-SDR is
+    # damage to the target, which is a weighting question.
+    ap.add_argument("--w-sisdr", type=float, default=None)
+    ap.add_argument("--w-suppress", type=float, default=None)
+    ap.add_argument("--w-consistency", type=float, default=None)
+    ap.add_argument("--w-mrstft", type=float, default=None)
+    ap.add_argument("--w-silence", type=float, default=None)
+    ap.add_argument("--suppress-tau-db", type=float, default=None)
     ap.add_argument("--out", type=Path, default=Path.home() / "runs" / "c1")
     ap.add_argument("--smoke", action="store_true", help="tiny model, for a wiring check")
     ap.add_argument(
@@ -177,6 +187,22 @@ def main(argv: list[str]) -> int:
     if train_ds.skipped_single_clip_speakers:
         print(f"  {train_ds.skipped_single_clip_speakers} speakers skipped (single clip)")
 
+    overrides = {
+        k: v
+        for k, v in {
+            "sisdr": args.w_sisdr,
+            "suppress": args.w_suppress,
+            "consistency": args.w_consistency,
+            "mrstft": args.w_mrstft,
+            "silence": args.w_silence,
+            "suppress_tau_db": args.suppress_tau_db,
+        }.items()
+        if v is not None
+    }
+    weights = LossWeights(**overrides)
+    if overrides:
+        print(f"  loss weights: {overrides}")
+
     model_cfg = SeaveConfig(emb_dim=32, lstm_hidden=48, n_blocks=2) if args.smoke else SeaveConfig()
     model = Seave(model_cfg)
     trainer = Trainer(
@@ -190,7 +216,7 @@ def main(argv: list[str]) -> int:
             modality_dropout=False,  # C1 is audio-only; there is no visual stream to drop
             out_dir=args.out,
         ),
-        LossWeights(),
+        weights,
     )
     params = sum(p.numel() for p in model.parameters())
     print(
