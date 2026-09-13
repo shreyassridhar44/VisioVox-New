@@ -89,6 +89,12 @@ class Trainer:
         self.opt = torch.optim.AdamW(model.parameters(), lr=self.cfg.lr, weight_decay=1e-2)
         self.step = 0
         self.history: list[StepResult] = []
+        # C2 attaches a visual frontend here. It has to run *inside* the
+        # forward pass rather than in the dataloader: computing features ahead
+        # of time would either detach them from the graph, so the frontend
+        # never learns, or keep every micro-batch's graph alive at once, which
+        # does not fit in memory at four accumulation steps of video.
+        self.visual_encoder: nn.Module | None = None
         set_seed(self.cfg.seed)
 
     def _forward_loss(self, batch: dict[str, torch.Tensor]) -> tuple[LossBreakdown, torch.Tensor]:
@@ -107,6 +113,10 @@ class Trainer:
         )
         visual = batch.get("visual")
         visual = visual.to(self.device) if visual is not None else None
+        if visual is None and self.visual_encoder is not None and "mouth" in batch:
+            # Seave resizes the visual sequence onto the STFT grid itself, so
+            # the frontend's native 25 fps output is handed over unchanged.
+            visual = self.visual_encoder(batch["mouth"].to(self.device, non_blocking=True))
         v_conf = batch.get("visual_confidence")
         v_conf = v_conf.to(self.device) if v_conf is not None else None
 
