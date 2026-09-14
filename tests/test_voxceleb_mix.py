@@ -186,3 +186,56 @@ def test_activity_mask_marks_speech(packed: Path) -> None:
     s = ds.sample(0)
     assert s.active.dtype == np.bool_
     assert s.active.any(), "a tonal target should register as active"
+
+
+# --------------------------------------------------------------------------
+# confusable pairing (Phase 4c step C)
+# --------------------------------------------------------------------------
+
+
+def test_confusable_partner_is_always_chosen_when_probability_is_one(packed: Path) -> None:
+    """The whole point of step C: a uniform draw made the voice cue sufficient."""
+    partners = {"id0000": ["id0002"], "id0002": ["id0000"]}
+    ds = VoxCelebMixDataset(packed, MixConfig(seed=0, confusable_prob=1.0), partners=partners)
+    seen = [ds.sample(i) for i in range(40)]
+    for s in seen:
+        if s.target_speaker in partners:
+            assert s.interferer_speakers == tuple(partners[s.target_speaker])
+
+
+def test_partners_outside_this_split_are_ignored(packed: Path) -> None:
+    """A partner map spans the whole split; a dataset holds one half of it.
+
+    Honouring an out-of-split partner would pull held-out validation speakers
+    into training mixtures, which is the one mistake this dataset exists to
+    prevent.
+    """
+    ds = VoxCelebMixDataset(
+        packed,
+        MixConfig(seed=0, confusable_prob=1.0),
+        speakers=["id0000", "id0001"],
+        partners={"id0000": ["id0003"], "id0001": ["id0002"]},
+    )
+    for i in range(30):
+        s = ds.sample(i)
+        assert set(s.interferer_speakers) <= {"id0000", "id0001"}
+        assert s.target_speaker not in s.interferer_speakers
+
+
+def test_zero_probability_keeps_the_uniform_draw(packed: Path) -> None:
+    """The default must leave C1/C3/C4 behaviour untouched."""
+    partners = {"id0000": ["id0002"]}
+    ds = VoxCelebMixDataset(packed, MixConfig(seed=0, confusable_prob=0.0), partners=partners)
+    chosen = {
+        ds.sample(i).interferer_speakers[0]
+        for i in range(60)
+        if ds.sample(i).target_speaker == "id0000"
+    }
+    assert len(chosen) > 1
+
+
+def test_target_is_never_its_own_interferer(packed: Path) -> None:
+    ds = VoxCelebMixDataset(packed, MixConfig(seed=3, confusable_prob=0.5), partners={})
+    for i in range(50):
+        s = ds.sample(i)
+        assert s.target_speaker not in s.interferer_speakers

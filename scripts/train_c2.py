@@ -40,6 +40,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
+from models.conditioning import DropoutConfig
 from models.seave import Seave, SeaveConfig
 from models.visual import VisualFrontend
 from training.losses import LossWeights, si_sdr
@@ -127,7 +128,7 @@ class AudioVisualSeave(torch.nn.Module):
     def forward(
         self,
         mixture: torch.Tensor,
-        speaker: torch.Tensor,
+        speaker: torch.Tensor | None,
         audio_conf: torch.Tensor,
         mouth: torch.Tensor | None = None,
         visual_conf: torch.Tensor | None = None,
@@ -150,7 +151,17 @@ def validate(
     device: torch.device,
     *,
     with_video: bool,
+    with_speaker: bool = True,
 ) -> float:
+    """Mean SI-SDRi over a fixed dev subset, with either cue optionally withheld.
+
+    Withholding the speaker embedding is the direct measurement this stage was
+    missing. `AV` minus `audio-only` is a difference between two strong numbers
+    and stayed inside noise all through C2 v1; `visual-only` asks the question
+    on its own terms -- given no idea what the target sounds like, can the model
+    find them from the mouth? A near-zero answer there means the video is not
+    being used, whatever the AV column says.
+    """
     model.eval()
     scores: list[float] = []
     rng = np.random.default_rng(0)
@@ -158,8 +169,10 @@ def validate(
     for batch in make_batches(ds, indices, batch_size):
         mixture = batch["mixture"].to(device)
         target = batch["target"].to(device)
-        emb = batch["speaker_embedding"].to(device)
-        conf = torch.ones(mixture.shape[0], device=device)
+        emb = batch["speaker_embedding"].to(device) if with_speaker else None
+        # The gate is trained to read the confidence, so withholding a cue means
+        # declaring it absent as well as zeroing it.
+        conf = torch.full((mixture.shape[0],), float(with_speaker), device=device)
         mouth = batch["mouth"].to(device) if with_video else None
         est = model(mixture, emb, conf, mouth)["estimate"]
         scores.extend((si_sdr(est, target) - si_sdr(mixture, target)).cpu().tolist())
@@ -178,8 +191,28 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--val-items", type=int, default=120)
     ap.add_argument("--chunk-seconds", type=float, default=4.0)
     ap.add_argument("--holdout", type=int, default=18, help="speakers reserved for validation")
+    # Step B: the audio cue is withheld far more often than the 0.15 the shared
+    # default uses. C2 v1 could satisfy its loss from the voice embedding alone
+    # on 85% of items, so it did, and the visual path never had to work. At 0.5
+    # half of all items offer no voice cue at all.
+    ap.add_argument("--drop-audio-cue", type=float, default=0.5)
+    # Raised alongside it to keep the audio-only fallback trained. The mutual
+    # exclusion in apply_modality_dropout drops visual only when audio survives,
+    # so the effective rate is this times (1 - drop_audio_cue): 0.40 * 0.5 = the
+    # 0.20 the fallback had before.
+    ap.add_argument("--drop-visual", type=float, default=0.40)
+    # Step C.
+    ap.add_argument("--confusable-prob", type=float, default=0.5)
+    ap.add_argument(
+        "--tir", type=float, nargs=2, default=(-8.0, 3.0),
+        help="target-to-interferer ratio range; wider and lower than the default (-5, 5)",
+    )  # fmt: skip
     ap.add_argument("--out", type=Path, default=Path.home() / "runs" / "c2")
     ap.add_argument("--init-from", type=Path, default=Path.home() / "runs" / "c3" / "best.pt")
+    ap.add_argument(
+        "--init-visual", type=Path, default=Path.home() / "runs" / "sync" / "visual.pt",
+        help="frontend from scripts/pretrain_sync.py; 'none' to start random",
+    )  # fmt: skip
     ap.add_argument("--resume", nargs="?", const="auto", default=None)
     args = ap.parse_args(argv)
 
@@ -195,12 +228,31 @@ def main(argv: list[str]) -> int:
     val_speakers = speakers[: args.holdout]
     train_speakers = speakers[args.holdout :]
 
-    cfg = MixConfig(chunk_seconds=args.chunk_seconds, seed=0)
-    train_ds = EnroledMixDataset(
-        VoxCelebMixDataset(PACKED / "test", cfg, speakers=train_speakers), enrol, seed=0
+    partners: dict[str, list[str]] = {}
+    pairs_path = PACKED / "test-confusable.json"
+    if args.confusable_prob > 0:
+        if not pairs_path.exists():
+            print(f"missing {pairs_path}; run scripts/build_confusable_pairs.py")
+            return 2
+        partners = json.loads(pairs_path.read_text())
+
+    cfg = MixConfig(
+        chunk_seconds=args.chunk_seconds,
+        seed=0,
+        tir_db=(float(args.tir[0]), float(args.tir[1])),
+        confusable_prob=args.confusable_prob,
     )
+    train_ds = EnroledMixDataset(
+        VoxCelebMixDataset(PACKED / "test", cfg, speakers=train_speakers, partners=partners),
+        enrol,
+        seed=0,
+    )
+    # The dev set keeps the same confusable bias: a held-out set that is easier
+    # than the training set reports a number the product will not reproduce.
     dev_ds = EnroledMixDataset(
-        VoxCelebMixDataset(PACKED / "test", cfg, speakers=val_speakers), enrol, seed=1
+        VoxCelebMixDataset(PACKED / "test", cfg, speakers=val_speakers, partners=partners),
+        enrol,
+        seed=1,
     )
     print(f"train {len(train_ds):,} items / {len(train_speakers)} speakers")
     print(f"dev   {len(dev_ds):,} items / {len(val_speakers)} speakers (disjoint)")
@@ -218,6 +270,10 @@ def main(argv: list[str]) -> int:
             out_dir=args.out,
         ),
         LossWeights(),
+        DropoutConfig(
+            drop_visual=args.drop_visual,
+            drop_audio_cue=args.drop_audio_cue,
+        ),
     )
     # The trainer optimises the audio model; the frontend needs to be in the
     # same optimiser or it never learns.
@@ -228,6 +284,15 @@ def main(argv: list[str]) -> int:
     print(
         f"device={device}  audio {audio_params / 1e6:.1f}M + visual {visual_params / 1e6:.1f}M  "
         f"batch={args.batch}x{args.grad_accum}  steps={args.steps}"
+    )
+    # The effective rates, not the drawn ones: apply_modality_dropout suppresses
+    # a visual drop whenever the audio cue was also drawn, so the configured
+    # numbers are not the ones the model sees.
+    p_audio_only = args.drop_visual * (1 - args.drop_audio_cue)
+    print(
+        f"cues: visual-only {args.drop_audio_cue:.0%}  audio-only {p_audio_only:.0%}  "
+        f"both {1 - args.drop_audio_cue - p_audio_only:.0%}   "
+        f"tir={cfg.tir_db}  confusable={args.confusable_prob:.0%}"
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -252,8 +317,29 @@ def main(argv: list[str]) -> int:
     elif args.init_from is not None:
         skipped = trainer.init_from(args.init_from)
         print(f"initialised audio path from {args.init_from}, {len(skipped)} left random")
-        audio_only = validate(model, dev_ds, args.val_items, args.batch, device, with_video=False)
-        print(f"  audio-only baseline on this dev set: {audio_only:+.2f} dB\n")
+        # Step A: the frontend arrives knowing what a moving mouth sounds like,
+        # rather than learning it from a separation gradient the audio path has
+        # already satisfied. Loaded after init_from because that call only
+        # touches the audio model.
+        if str(args.init_visual).lower() != "none":
+            if not args.init_visual.exists():
+                print(f"missing {args.init_visual}; run scripts/pretrain_sync.py")
+                return 2
+            sync = torch.load(args.init_visual, map_location=device, weights_only=False)
+            model.visual.load_state_dict(sync["visual"])
+            print(
+                f"initialised visual frontend from {args.init_visual} "
+                f"(sync acc {sync.get('acc', float('nan')):.3f} at step {sync.get('step', -1)})"
+            )
+        base_ao = validate(model, dev_ds, args.val_items, args.batch, device, with_video=False)
+        base_vo = validate(
+            model, dev_ds, args.val_items, args.batch, device, with_video=True, with_speaker=False
+        )
+        print(
+            f"  baselines on this dev set: audio-only {base_ao:+.2f} dB, "
+            f"visual-only {base_vo:+.2f} dB"
+        )
+        print()
 
     def save(path: Path, extra: dict[str, float]) -> None:
         trainer.save(path, extra)
@@ -279,14 +365,20 @@ def main(argv: list[str]) -> int:
         if (step + 1) % args.val_every == 0 or step == args.steps - 1:
             av = validate(model, dev_ds, args.val_items, args.batch, device, with_video=True)
             ao = validate(model, dev_ds, args.val_items, args.batch, device, with_video=False)
-            log.append({"step": float(step), "val_si_sdri": av, "audio_only": ao})
+            vo = validate(
+                model, dev_ds, args.val_items, args.batch, device,
+                with_video=True, with_speaker=False,
+            )  # fmt: skip
+            log.append(
+                {"step": float(step), "val_si_sdri": av, "audio_only": ao, "visual_only": vo}
+            )
             marker = ""
             if av > best:
                 best = av
                 save(args.out / "best.pt", {"val_si_sdri": best})
                 marker = "  <- best"
             print(
-                f"    AV {av:+.2f} dB   audio-only {ao:+.2f} dB   "
+                f"    AV {av:+.2f} dB   audio-only {ao:+.2f} dB   visual-only {vo:+.2f} dB   "
                 f"visual worth {av - ao:+.2f} dB{marker}",
                 flush=True,
             )

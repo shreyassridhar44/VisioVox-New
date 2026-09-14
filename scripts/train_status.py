@@ -162,6 +162,31 @@ def main(argv: list[str]) -> int:
     print(f"\n  val SI-SDRi   {sparkline(shown)}   last {scores[-1]:+.2f} dB")
     print(f"  best          {best:+.2f} dB at step {best_step:,}   gate {args.gate:.0f} dB")
 
+    # C2 logs an audio-only score beside the audio-visual one, on the same
+    # items. The gap between them is what the visual pathway is actually worth
+    # — the headline number alone cannot separate "the video is helping" from
+    # "the audio path is still adapting to a new corpus", and during C2 both
+    # are moving at once.
+    if history and "audio_only" in history[-1]:
+        audio = [float(e["audio_only"]) for e in history if "audio_only" in e]
+        gains = [
+            float(e["val_si_sdri"]) - float(e["audio_only"]) for e in history if "audio_only" in e
+        ]
+        recent_gain = sum(gains[-5:]) / len(gains[-5:])
+        print(f"  audio-only    {sparkline(audio[-args.tail :])}   last {audio[-1]:+.2f} dB")
+        # C2 v2 also withholds the voice cue entirely. This column is the
+        # honest test of whether the frontend learned anything: AV minus
+        # audio-only is a difference between two large numbers and sat inside
+        # noise for all of v1, whereas visual-only cannot be faked by the audio
+        # path -- there is no speaker embedding to lean on.
+        if "visual_only" in history[-1]:
+            vis = [float(e["visual_only"]) for e in history if "visual_only" in e]
+            print(f"  visual-only   {sparkline(vis[-args.tail :])}   last {vis[-1]:+.2f} dB")
+        print(
+            f"  visual worth  {gains[-1]:+.2f} dB now, {recent_gain:+.2f} dB over the "
+            f"last {min(5, len(gains))} checks   (best {max(gains):+.2f})"
+        )
+
     # Trend over the recent half, which is what a projection can honestly use:
     # the early part of a separation run is dominated by the model getting
     # worse than passthrough before it gets better.

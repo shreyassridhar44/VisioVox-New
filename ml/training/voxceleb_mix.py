@@ -55,6 +55,13 @@ class MixConfig:
     # Fraction of the chunk where the interferer is present at all.
     overlap_ratio: tuple[float, float] = (0.2, 1.0)
     peak_ceiling: float = 0.99
+    # Probability of drawing the interferer from the target's confusable set
+    # rather than uniformly (docs/07 SS3, Phase 4c step C). Zero reproduces the
+    # original uniform behaviour, and is the default so existing stages are
+    # unaffected; C2 raises it. A uniform draw over a hundred-odd speakers is
+    # nearly always a cross-gender pair, which an ECAPA embedding separates on
+    # its own -- leaving the visual pathway with nothing to add.
+    confusable_prob: float = 0.0
     seed: int | None = None
 
 
@@ -96,10 +103,12 @@ class VoxCelebMixDataset:
         config: MixConfig | None = None,
         speakers: list[str] | None = None,
         length: int | None = None,
+        partners: dict[str, list[str]] | None = None,
     ) -> None:
         self.root = Path(packed_root)
         self.config = config or MixConfig()
         self._rng = random.Random(self.config.seed)
+        self.partners = partners or {}
 
         self.by_speaker: dict[str, list[Path]] = {}
         for spk_dir in sorted(p for p in self.root.iterdir() if p.is_dir()):
@@ -124,6 +133,24 @@ class VoxCelebMixDataset:
 
     def __len__(self) -> int:
         return self._length
+
+    def _pick_interferers(self, target: str, rng: random.Random) -> tuple[str, ...]:
+        """Choose who talks over the target.
+
+        Partners are filtered against this dataset's own speakers, because the
+        map is built over the whole split while a dataset usually holds only
+        the train or the val half of it -- an unfiltered partner would reach
+        across the holdout boundary and leak validation speakers into training.
+
+        Falls back to a uniform draw whenever the confusable pool is too small,
+        so a sparse map degrades to the original behaviour rather than failing.
+        """
+        pool: list[str] = []
+        if self.partners and rng.random() < self.config.confusable_prob:
+            pool = [s for s in self.partners.get(target, []) if s in self.by_speaker]
+        if len(pool) < self.config.n_interferers:
+            pool = [s for s in self.speakers if s != target]
+        return tuple(rng.sample(pool, self.config.n_interferers))
 
     def _load(self, path: Path) -> tuple[np.ndarray, np.ndarray]:
         with np.load(path) as z:
@@ -154,8 +181,8 @@ class VoxCelebMixDataset:
         frames = int(cfg.chunk_seconds * FPS)
         n_samples = frames * SAMPLES_PER_FRAME
 
-        chosen = rng.sample(self.speakers, cfg.n_interferers + 1)
-        target_spk, interferer_spks = chosen[0], tuple(chosen[1:])
+        target_spk = rng.choice(self.speakers)
+        interferer_spks = self._pick_interferers(target_spk, rng)
 
         t_audio, t_mouth = self._load(rng.choice(self.by_speaker[target_spk]))
         target, mouth = self._chunk(t_audio, t_mouth, frames, rng)
