@@ -52,7 +52,7 @@ while true; do
   log "c2-v2 stopped early (resume $resumes/$MAX_RESUMES); restarting"
   cd "$REPO" || exit 1
   setsid nohup uv run python scripts/train_c2.py \
-    --steps 20000 --val-every 500 \
+    --steps 12000 --val-every 500 \
     --out "$OUT" \
     --drop-audio-cue 0.5 --drop-visual 0.40 \
     --confusable-prob 0.5 --tir -8.0 3.0 \
