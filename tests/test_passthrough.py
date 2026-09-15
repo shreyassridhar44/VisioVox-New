@@ -159,3 +159,21 @@ def test_frame_activity_finds_the_speech() -> None:
     audio[FRAME_SAMPLES * 3 : FRAME_SAMPLES * 6] = 0.4
     active = frame_activity(audio)
     assert list(active) == [0, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+
+
+def test_a_fully_passthrough_timeline_is_not_faded_at_the_file_edges() -> None:
+    """Passthrough exists for faithfulness, so it has to be faithful at sample 0.
+
+    Smoothing the gain curve with a plain centred convolution treats everything
+    before the file as silence, which fades the opening 40 ms down by about
+    half -- audible as a dip at the start of every isolated track, and wrong on
+    a timeline that never leaves passthrough.
+    """
+    frames = 100
+    n = frames * FRAME_SAMPLES
+    mixture = np.sin(2 * np.pi * 220.0 * np.arange(n) / 16_000).astype(np.float32)
+    route = np.full(frames, Route.PASSTHROUGH.value, dtype=np.int8)
+
+    out = apply(mixture, np.zeros(n, dtype=np.float32), route)
+
+    assert np.allclose(out, mixture, atol=1e-5)

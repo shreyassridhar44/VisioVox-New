@@ -83,6 +83,25 @@ def _smooth(route: np.ndarray, min_run: int) -> np.ndarray:
     return out
 
 
+def _soften(gain: np.ndarray, window: int) -> np.ndarray:
+    """Smooth a gain curve without inventing a fade at the ends of the file.
+
+    A plain `np.convolve(..., mode="same")` treats everything outside the array
+    as zero, so the first and last half-window get pulled down towards silence
+    -- roughly a 50% dip over the opening 40 ms of every track, including one
+    that is pure passthrough and by definition should be bit-faithful. Padding
+    with the edge value first makes the boundary behave like a continuation of
+    the first decision, which is what it actually is: the recording starts
+    mid-state, not fading in from nothing. Interior transitions, where the
+    crossfade is wanted, are unaffected.
+    """
+    pad = window // 2
+    kernel = np.ones(window, dtype=np.float32) / window
+    padded = np.pad(gain, pad, mode="edge")
+    smoothed = np.convolve(padded, kernel, mode="same")
+    return smoothed[pad : pad + len(gain)].astype(np.float32)
+
+
 def apply(
     mixture: np.ndarray,
     extracted: np.ndarray,
@@ -112,9 +131,8 @@ def apply(
 
     if fade_frames > 0:
         window = fade_frames * FRAME_SAMPLES
-        kernel = np.ones(window, dtype=np.float32) / window
-        gain_mix = np.convolve(gain_mix, kernel, mode="same").astype(np.float32)
-        gain_est = np.convolve(gain_est, kernel, mode="same").astype(np.float32)
+        gain_mix = _soften(gain_mix, window)
+        gain_est = _soften(gain_est, window)
 
     return (mixture * gain_mix + extracted[:n] * gain_est).astype(np.float32)
 
