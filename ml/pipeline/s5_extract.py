@@ -134,6 +134,7 @@ class SeaveExtractor:
         mixture: np.ndarray,
         enrolment: np.ndarray,
         mouth: np.ndarray | None = None,
+        visual_confidence: np.ndarray | None = None,
     ) -> tuple[np.ndarray, float]:
         """Extract one window. Returns the estimate and the model's confidence."""
         mix = torch.from_numpy(mixture).float().unsqueeze(0).to(self.device)
@@ -146,7 +147,17 @@ class SeaveExtractor:
             rois = torch.from_numpy(mouth.astype(np.float32) / 255.0)
             rois = rois.unsqueeze(0).unsqueeze(0).to(self.device)  # (1, 1, frames, H, W)
             features = self.visual(rois)
-            v_conf = torch.ones(1, features.shape[1], device=self.device)
+            if visual_confidence is None:
+                # No tracker information: trust every frame equally. Correct
+                # only when the caller already knows the face is present
+                # throughout, which is why S5 passes the real thing.
+                v_conf = torch.ones(1, features.shape[1], device=self.device)
+            else:
+                v_conf = (
+                    torch.from_numpy(visual_confidence.astype(np.float32))
+                    .unsqueeze(0)
+                    .to(self.device)
+                )
 
         out = self.model(mix, emb, a_conf, features, v_conf)
         estimate = out["estimate"].squeeze(0).cpu().numpy().astype(np.float32)
@@ -169,6 +180,7 @@ def extract_speaker(
     target_active: np.ndarray,
     others_active: np.ndarray,
     mouth: np.ndarray | None = None,
+    visual_confidence: np.ndarray | None = None,
     min_run: int = 5,
     window_seconds: float = WINDOW_SECONDS,
     hop_seconds: float = HOP_SECONDS,
@@ -178,7 +190,9 @@ def extract_speaker(
     `target_active` and `others_active` are per-frame booleans on the 25 fps
     grid, from S3. `mouth` is that speaker's ROI sequence on the same grid, or
     None when S2B found no usable face -- in which case the audio-only path
-    runs and the result is still full length.
+    runs and the result is still full length. `visual_confidence` is the
+    per-frame trust in those ROIs, from `mouth_roi.MouthRois`; it drives the
+    per-frame gate, so a head turn costs the visual cue only for its own frames.
     """
     n = len(mixture)
     route = passthrough.decide(target_active, others_active, min_run=min_run)
@@ -206,14 +220,25 @@ def extract_speaker(
                 chunk = np.pad(chunk, (0, win - span))
 
             roi = None
+            roi_conf = None
             if mouth is not None and extractor.has_video:
                 frames_per_window = win // FRAME_SAMPLES
                 roi = mouth[lo_frame : lo_frame + frames_per_window]
                 if len(roi) < frames_per_window:
                     pad = frames_per_window - len(roi)
                     roi = np.concatenate([roi, np.zeros((pad, *roi.shape[1:]), roi.dtype)])
+                if visual_confidence is not None:
+                    roi_conf = visual_confidence[lo_frame : lo_frame + frames_per_window]
+                    if len(roi_conf) < frames_per_window:
+                        # Padded ROI frames are black, so their confidence is
+                        # zero rather than inherited -- the gate must not be
+                        # told to trust pixels that were invented to fill a
+                        # window.
+                        roi_conf = np.concatenate(
+                            [roi_conf, np.zeros(frames_per_window - len(roi_conf), np.float32)]
+                        )
 
-            est, conf = extractor.run_window(chunk, enrolment, roi)
+            est, conf = extractor.run_window(chunk, enrolment, roi, roi_conf)
             est = _match_scale(est, chunk)
             confidences.append(conf)
 
@@ -239,6 +264,7 @@ def extract(
     target_active: np.ndarray,
     others_active: np.ndarray,
     mouth: np.ndarray | None = None,
+    visual_confidence: np.ndarray | None = None,
 ) -> tuple[ExtractionResult, StageResult]:
     """Stage wrapper: same call, plus the timing and status the runner records."""
     t0 = time.perf_counter()
@@ -250,6 +276,7 @@ def extract(
         target_active=target_active,
         others_active=others_active,
         mouth=mouth,
+        visual_confidence=visual_confidence,
     )
     result.seconds = time.perf_counter() - t0
     modality = "audio+video" if (mouth is not None and extractor.has_video) else "audio-only"

@@ -37,13 +37,19 @@ from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
+
+# The crop geometry is defined once, next to the code that reproduces it at
+# inference time. Duplicating the filter string here is how the training and
+# serving crops quietly stop matching.
+from pipeline.mouth_roi import MOUTH, ffmpeg_filter
+
 ROOT = Path.home() / "data" / "voxceleb2"
 EXTRACT = ROOT / "extracted"
 PACKED = ROOT / "packed"
 
 RATE = 16_000
 FPS = 25
-MOUTH = 96  # output ROI, pixels
 
 
 @dataclass
@@ -140,7 +146,7 @@ def decode_mouth(path: Path, max_frames: int) -> np.ndarray | None:
     if ffmpeg is None:
         return None
     # crop the lower-middle of the frame, then scale to the ROI size
-    vf = f"fps={FPS},crop=iw*0.6:ih*0.36:iw*0.2:ih*0.56,scale={MOUTH}:{MOUTH},format=gray"
+    vf = ffmpeg_filter(FPS, MOUTH)
     proc = subprocess.run(  # noqa: S603 - resolved path, fixed argv
         [
             ffmpeg,

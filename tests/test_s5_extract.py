@@ -31,6 +31,7 @@ class _StubExtractor:
         self._has_video = has_video
         self.windows_run = 0
         self.saw_video: list[bool] = []
+        self.confidences: list[np.ndarray | None] = []
 
     @property
     def has_video(self) -> bool:
@@ -41,9 +42,11 @@ class _StubExtractor:
         mixture: np.ndarray,
         enrolment: np.ndarray,
         mouth: np.ndarray | None = None,
+        visual_confidence: np.ndarray | None = None,
     ) -> tuple[np.ndarray, float]:
         self.windows_run += 1
         self.saw_video.append(mouth is not None)
+        self.confidences.append(visual_confidence)
         # A tone unrelated to the input, so scale matching cannot turn it back
         # into the mixture and a passthrough region stays distinguishable.
         t = np.arange(len(mixture)) / RATE
@@ -246,3 +249,53 @@ def test_processed_fraction_reports_the_share_actually_extracted() -> None:
 def test_processed_fraction_of_an_empty_route_is_zero() -> None:
     result = ExtractionResult(audio=np.zeros(0), route=np.zeros(0, dtype=np.int8))
     assert result.processed_fraction == 0.0
+
+
+def test_per_frame_visual_confidence_reaches_the_model() -> None:
+    """A head turn must cost the visual cue only for the frames it covers."""
+    frames = 200
+    conf = np.ones(frames, dtype=np.float32)
+    conf[50:80] = 0.0  # the speaker looks away for 1.2 s
+    stub = _StubExtractor(has_video=True)
+
+    extract_speaker(
+        _mixture(frames),
+        EMB,
+        _as_extractor(stub),
+        target_active=np.ones(frames),
+        others_active=np.ones(frames),
+        mouth=np.zeros((frames, 96, 96), dtype=np.uint8),
+        visual_confidence=conf,
+    )
+
+    passed = [c for c in stub.confidences if c is not None]
+    assert len(passed) == stub.windows_run
+    assert any(float(c.min()) == 0.0 for c in passed), "the closed-gate frames never arrived"
+    assert any(float(c.max()) == 1.0 for c in passed), "the open-gate frames never arrived"
+
+
+def test_confidence_for_padded_roi_frames_is_zero_not_inherited() -> None:
+    """Window padding invents black pixels; the gate must not be told to trust them.
+
+    Padding happens when the video runs out before the audio does, not merely
+    because the clip is not a whole number of windows -- the last window is
+    positioned to end exactly at the final sample, so it needs no padding.
+    """
+    frames = 200
+    covered = frames - 60  # the face is only tracked for the first 5.6 s
+    stub = _StubExtractor(has_video=True)
+
+    extract_speaker(
+        _mixture(frames),
+        EMB,
+        _as_extractor(stub),
+        target_active=np.ones(frames),
+        others_active=np.ones(frames),
+        mouth=np.zeros((covered, 96, 96), dtype=np.uint8),
+        visual_confidence=np.ones(covered, dtype=np.float32),
+    )
+
+    passed = [c for c in stub.confidences if c is not None]
+    assert passed, "video was never offered to the model"
+    assert all(len(c) == 100 for c in passed), "confidence must span the whole window"
+    assert any(float(c.min()) == 0.0 for c in passed), "padded frames should read as untrusted"
