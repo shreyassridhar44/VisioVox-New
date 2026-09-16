@@ -35,9 +35,10 @@ STAGE = "S0_ingest"
 VERSION = "1.0.0"
 
 SANDBOX_NOTE = (
-    "Phase 1 runs ffmpeg directly on curated AMI fixtures. Before any "
-    "user-supplied media reaches this stage it must be wrapped per docs/15 §4 "
-    "(invariant 5). Tracked as a Phase 2 gate."
+    "Curated fixtures are probed directly; user-supplied media MUST go through "
+    "pipeline.sandbox, which runs ffmpeg/ffprobe confined per ADR-0009 "
+    "(invariant 5). _run below is the single choke point - route it through "
+    "sandbox.run when wiring the real pipeline in W8."
 )
 
 _FFMPEG_TIMEOUT = 3600
