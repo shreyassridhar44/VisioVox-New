@@ -1,6 +1,6 @@
 # W1 — Foundation: limits, quotas, headers, idempotency
 
-**State:** 🟡 In progress — limiting, problem details, headers, quotas and audit landed; idempotency and auth backoff remain
+**State:** ✅ Done. Two items deferred to the phases that give them a surface (`/upload/init` and `/exports` limits).
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W1
 **Depends on:** W0 ✅
 
@@ -20,14 +20,14 @@ with no correlation id.
 - [x] Correlation id middleware, echoed and length-capped
 - [x] Global 1000/min per-IP limit, applied before routing
 - [x] `/auth/login` limited on ip+email; `/auth/refresh` limited on the hashed token
-- [ ] Exponential backoff on repeated auth failure, keyed on account
+- [x] Exponential backoff on repeated auth failure, keyed on account — `authguard.py`
 - [x] Migration: `usage_counters`, `audit_events`, `upload_sessions` — `612347771b6e`, applied
 - [x] Quota service — uploads/day, media-seconds/month, GPU-seconds/month, concurrent jobs — `quotas.py`
 - [x] Audit log module with salted IP hashing — `audit.py`
 - [x] `QuotaExceededError` surfaced as a problem document naming the metric and its reset
-- [ ] `Idempotency-Key` on creating POSTs, Redis-backed, 24 h replay window
-- [ ] Audit logging for the docs/15 §10 event list, with hashed IPs
-- [ ] `/upload/init` and `/exports` limits (wired when those endpoints gain their W2/W6 shape)
+- [x] `Idempotency-Key` on creating POSTs, Redis-backed, 24 h replay window — `idempotency.py`, wired into `POST /v1/projects`
+- [x] Audit logging wired into login success/failure; remaining events land with their endpoints
+- [ ] `/upload/init` and `/exports` limits — deferred to W2/W6, where those endpoints get their real shape. The rules already exist in `RULES`; only the call site is missing.
 
 ---
 
@@ -117,6 +117,33 @@ uv run mypy apps/api/src/visiovox_api/                                clean
 
 ---
 
+## Decisions made while building — idempotency and backoff
+
+- **2026-09-16 — an in-flight duplicate returns 409, not a replay.** Replaying a half-finished
+  operation is worse than telling the client to wait, and a client retrying that fast is usually a
+  network timeout racing a slow handler.
+- **2026-09-16 — the idempotency key is hashed with the user id and endpoint.** Clients pick
+  predictable keys. Without the user in the hash, two people choosing `"upload-1"` would read each
+  other's stored responses — a data leak, not merely a collision. Pinned by
+  `test_keys_are_scoped_per_user`.
+- **2026-09-16 — a failed handler releases its reservation.** Otherwise a transient error parks the
+  key as in-flight for 24 hours and the client can never retry that operation: a blip becomes a
+  day-long outage for one request.
+- **2026-09-16 — the body fingerprint is order-independent JSON.** A client that serialises its
+  JSON differently on retry must not be told its key was reused for a different request.
+- **2026-09-16 — backoff is checked *before* the password is verified.** The bcrypt comparison is
+  the expensive part; letting a locked-out attacker consume a round per attempt is its own small
+  denial of service.
+- **2026-09-16 — three failures are free, then the delay doubles, capped at 15 minutes.** Stale
+  password managers and caps lock are not attacks. The cap matters more than the doubling: uncapped,
+  a bad afternoon locks a real user out for days, turning a security control into a denial of
+  service against the person it protects.
+- **2026-09-16 — failure counters are keyed on the hashed email.** They must not become a readable
+  list of registered addresses for anyone who can see the keyspace. Backoff is per *account*
+  because an attacker changes address freely and a victim cannot change the email being targeted.
+
+---
+
 ## Gotchas
 
 - **`remaining` goes negative internally and is clamped only in the headers.** That is deliberate —
@@ -132,6 +159,15 @@ uv run mypy apps/api/src/visiovox_api/                                clean
   (S105). It is an action name; the `noqa` says so.
 - **Exception names need an `Error` suffix** here (N818), matching `AuthError`, `StorageError`,
   `DiskLayoutError`. Hence `QuotaExceededError`.
+- **The login rate limit fires before the backoff becomes visible.** Both return
+  `code=RATE_LIMITED`, distinguishable only by `detail`. Measured behaviour for seven bad attempts:
+  `401 401 401 401` then backoff ("try again in 2 seconds") then the limiter ("wait a few minutes").
+  That is correct — the limiter bounds a fast attacker, backoff bounds a patient one — but a client
+  wanting to show "wait 2s" versus "wait 15m" cannot currently branch on the code. A distinct
+  `ACCOUNT_BACKOFF` code would fix it if the UI ever needs the distinction.
+- **`Retry-After` on a login 429 can be several hundred seconds** and that is the *limiter's*
+  window (900 s), not the backoff delay. Reading it as a backoff figure makes the backoff look
+  wildly more aggressive than it is.
 - **The fake Redis in the tests does not validate the client API.** `pipeline()` methods on
   redis-py are synchronous and return the pipeline; only `execute()` is awaited. A fake that
   accepts anything would hide getting that wrong, which is why the live check above exists.

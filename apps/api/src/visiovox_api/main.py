@@ -11,15 +11,15 @@ import datetime as dt
 import hashlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
+from fastapi import APIRouter, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from . import auth_service, problems
+from . import audit, auth_service, authguard, idempotency, problems
 from .config import get_settings
 from .db import dispose_engine
 from .deps import CurrentUser, OwnedProject, SessionDep, SettingsDep
@@ -70,7 +70,8 @@ app = FastAPI(
 )
 
 _settings = get_settings()
-_limiter = RateLimiter(get_redis(_settings), _settings)
+_redis = get_redis(_settings)
+_limiter = RateLimiter(_redis, _settings)
 
 # Every error leaves as RFC 9457 Problem Details with a correlation id
 # (docs/11 §1), including the ones FastAPI would otherwise format itself.
@@ -193,6 +194,12 @@ async def login(
         ),
         "Too many sign-in attempts. Wait a few minutes before trying again.",
     )
+    # Before the password is verified: a locked-out attacker should not get to
+    # consume a bcrypt round per attempt.
+    await authguard.assert_not_backed_off(_redis, settings, body.email)
+
+    ip = client_ip(request, settings)
+    salt = settings.audit_ip_salt.get_secret_value()
     try:
         pair = await auth_service.login(
             session,
@@ -202,10 +209,32 @@ async def login(
             access_ttl_seconds=settings.access_token_ttl_seconds,
             refresh_ttl_days=settings.refresh_token_ttl_days,
             user_agent=request.headers.get("user-agent"),
-            ip=request.client.host if request.client else None,
+            ip=ip,
         )
     except auth_service.AuthError as exc:
+        await authguard.record_failure(_redis, body.email)
+        await audit.record(
+            session,
+            audit.LOGIN_FAILED,
+            outcome="failure",
+            ip=ip,
+            ip_salt=salt,
+            user_agent=request.headers.get("user-agent"),
+            correlation_id=problems.correlation_id(request),
+        )
+        await session.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+    await authguard.clear(_redis, body.email)
+    await audit.record(
+        session,
+        audit.LOGIN_SUCCEEDED,
+        user_id=pair.user_id,
+        ip=ip,
+        ip_salt=salt,
+        user_agent=request.headers.get("user-agent"),
+        correlation_id=problems.correlation_id(request),
+    )
     await session.commit()
     return _token_response(pair)
 
@@ -282,18 +311,62 @@ def _project_response(p: Project) -> ProjectResponse:
 
 @projects.post("", status_code=status.HTTP_201_CREATED)
 async def create_project(
-    body: CreateProjectRequest, user: CurrentUser, session: SessionDep
-) -> ProjectResponse:
+    body: CreateProjectRequest,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+    response: Response,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> Any:
     if not body.rights_attested:
         # FR-UPL-08: refuse rather than record a false attestation.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="rights attestation is required",
         )
-    project = Project(user_id=user.id, title=body.title, status="pending")
-    session.add(project)
-    await session.commit()
-    return _project_response(project)
+
+    # A dropped connection on this endpoint costs a duplicate project, and the
+    # next call creates a duplicate multipart upload behind it.
+    key = idempotency.validate_key(idempotency_key, required=False)
+    fp = idempotency.fingerprint(body.model_dump())
+    if key:
+        replay = await idempotency.begin(
+            _redis,
+            settings,
+            user_id=user.id,
+            endpoint="create_project",
+            client_key=key,
+            body_fingerprint=fp,
+        )
+        if replay is not None:
+            response.status_code = replay.status_code
+            return replay.body
+
+    try:
+        project = Project(user_id=user.id, title=body.title, status="pending")
+        session.add(project)
+        await session.commit()
+    except Exception:
+        # Otherwise the key stays parked as in-flight for 24 h and a transient
+        # error becomes a day-long outage for this one operation.
+        if key:
+            await idempotency.release(
+                _redis, user_id=user.id, endpoint="create_project", client_key=key
+            )
+        raise
+
+    payload = _project_response(project)
+    if key:
+        await idempotency.complete(
+            _redis,
+            user_id=user.id,
+            endpoint="create_project",
+            client_key=key,
+            body_fingerprint=fp,
+            status_code=status.HTTP_201_CREATED,
+            body=payload.model_dump(mode="json"),
+        )
+    return payload
 
 
 @projects.get("")
