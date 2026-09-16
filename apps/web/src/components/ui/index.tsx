@@ -266,7 +266,9 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs',
+        // self-start matters: inside a flex column the default is stretch, and
+        // a pill that spans the page reads as a broken banner rather than a tag.
+        'inline-flex w-fit self-start items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs',
         TONES[tone],
       )}
     >
