@@ -149,18 +149,75 @@ async def readyz(session: SessionDep) -> dict[str, str]:
 # --------------------------------------------------------------------------
 
 
-def _token_response(pair: auth_service.TokenPair) -> TokenResponse:
+# The refresh token lives in an httpOnly cookie, not in a response body the
+# browser would have to store somewhere (docs/28 W4).
+#
+# The access token is still returned in the body and held in memory for its ten
+# minutes. The refresh token is the dangerous one - it mints access tokens for
+# thirty days - and putting it anywhere JavaScript can read turns any XSS on any
+# page into a full, persistent account takeover.
+#
+# Scoped to the auth path so it is not attached to every API request, which
+# keeps it out of logs and away from handlers with no business seeing it.
+REFRESH_COOKIE = "visiovox_refresh"
+REFRESH_COOKIE_PATH = "/v1/auth"
+
+
+def _set_refresh_cookie(response: Response, pair: auth_service.TokenPair) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        REFRESH_COOKIE,
+        pair.refresh_token,
+        httponly=True,
+        # Plain HTTP in local development would otherwise drop the cookie
+        # silently, and every reload would look like a broken session.
+        secure=settings.is_production,
+        samesite=settings.refresh_cookie_samesite,
+        path=REFRESH_COOKIE_PATH,
+        max_age=settings.refresh_token_ttl_days * 24 * 3600,
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
+
+
+def _token_response(
+    pair: auth_service.TokenPair, response: Response, *, in_body: bool
+) -> TokenResponse:
+    """Issue the pair.
+
+    `in_body` keeps non-browser clients working: the Python client and the test
+    suite have no cookie jar and legitimately need the token in the response.
+    Browsers get the cookie and nothing else.
+    """
+    _set_refresh_cookie(response, pair)
     return TokenResponse(
         access_token=pair.access_token,
         expires_at=pair.access_expires_at,
-        refresh_token=pair.refresh_token,
+        refresh_token=pair.refresh_token if in_body else None,
         refresh_expires_at=pair.refresh_expires_at,
     )
 
 
+def _wants_body_token(request: Request) -> bool:
+    """Whether to echo the refresh token in the response body.
+
+    A browser sends Origin on these requests; a script client does not. It is a
+    heuristic, so it only decides whether to ALSO return what the cookie already
+    carries - a browser is never made less safe by it, it merely receives a
+    field it should ignore.
+    """
+    return request.headers.get("origin") is None
+
+
 @auth.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
-    body: RegisterRequest, session: SessionDep, settings: SettingsDep
+    body: RegisterRequest,
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    settings: SettingsDep,
 ) -> TokenResponse:
     try:
         user = await auth_service.register_user(
@@ -179,12 +236,16 @@ async def register(
     )
     await session.commit()
     _ = user
-    return _token_response(pair)
+    return _token_response(pair, response, in_body=_wants_body_token(request))
 
 
 @auth.post("/login")
 async def login(
-    body: LoginRequest, request: Request, session: SessionDep, settings: SettingsDep
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    settings: SettingsDep,
 ) -> TokenResponse:
     # Keyed on ip+email (docs/11 §10). IP alone lets one address grind through a
     # password list one account at a time; email alone lets an attacker lock a
@@ -239,25 +300,38 @@ async def login(
         correlation_id=problems.correlation_id(request),
     )
     await session.commit()
-    return _token_response(pair)
+    return _token_response(pair, response, in_body=_wants_body_token(request))
 
 
 @auth.post("/refresh")
 async def refresh(
-    body: RefreshRequest, request: Request, session: SessionDep, settings: SettingsDep
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    settings: SettingsDep,
+    body: RefreshRequest | None = None,
 ) -> TokenResponse:
+    # An explicitly supplied token wins over the cookie. A browser never sends a
+    # body, so this changes nothing for one: it still refreshes through a value
+    # JavaScript cannot read. But a client that names a token means that token,
+    # and letting the cookie override it silently breaks reuse detection - the
+    # replay would be answered with whatever the jar happened to hold, and a
+    # stolen token would look fine.
+    supplied = (body.refresh_token if body else None) or request.cookies.get(REFRESH_COOKIE)
+    if not supplied:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="no refresh token supplied"
+        )
     # The token itself is the key: there is no authenticated user yet, and the
     # token is what a replay attack would hammer. Hashed, because a raw refresh
     # token must never become a Redis key an operator could read.
     enforce(
-        await _limiter.check(
-            RULES["auth_refresh"], hashlib.sha256(body.refresh_token.encode()).hexdigest()
-        )
+        await _limiter.check(RULES["auth_refresh"], hashlib.sha256(supplied.encode()).hexdigest())
     )
     try:
         pair = await auth_service.refresh(
             session,
-            body.refresh_token,
+            supplied,
             secret=settings.auth_secret.get_secret_value(),
             access_ttl_seconds=settings.access_token_ttl_seconds,
             refresh_ttl_days=settings.refresh_token_ttl_days,
@@ -269,13 +343,24 @@ async def refresh(
     except auth_service.AuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     await session.commit()
-    return _token_response(pair)
+    return _token_response(pair, response, in_body=_wants_body_token(request))
 
 
 @auth.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(body: RefreshRequest, session: SessionDep) -> None:
-    await auth_service.logout(session, body.refresh_token)
-    await session.commit()
+async def logout(
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    body: RefreshRequest | None = None,
+) -> None:
+    # Same precedence as refresh: an explicitly named token is the one to revoke.
+    supplied = (body.refresh_token if body else None) or request.cookies.get(REFRESH_COOKIE)
+    if supplied:
+        await auth_service.logout(session, supplied)
+        await session.commit()
+    # Cleared even when nothing matched, so a stale cookie cannot survive a
+    # sign-out and keep presenting itself.
+    _clear_refresh_cookie(response)
 
 
 @auth.get("/me")

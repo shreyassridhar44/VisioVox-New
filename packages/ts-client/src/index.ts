@@ -81,19 +81,28 @@ export class VisioVoxClient {
 
   private async raw(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers);
+    // Auth endpoints set and read the refresh cookie; everything else is
+    // bearer-authenticated and has no business carrying it. Spread rather than
+    // assigned undefined, because exactOptionalPropertyTypes distinguishes
+    // "absent" from "present and undefined".
+    const credentials: { credentials?: RequestCredentials } = path.startsWith('/v1/auth')
+      ? { credentials: 'include' }
+      : {};
     if (!headers.has('content-type') && init.body !== undefined) {
       headers.set('content-type', 'application/json');
     }
     if (this.tokens) {
       headers.set('authorization', `Bearer ${this.tokens.accessToken}`);
     }
-    return this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers });
+    return this.fetchImpl(`${this.baseUrl}${path}`, { ...init, ...credentials, headers });
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let response = await this.raw(path, init);
 
-    if (response.status === 401 && this.tokens) {
+    // Attempted even with no access token in memory: after a reload the
+    // cookie is all that survives, and it is enough to recover the session.
+    if (response.status === 401) {
       const refreshed = await this.refreshOnce();
       if (refreshed) {
         response = await this.raw(path, init);
@@ -109,7 +118,7 @@ export class VisioVoxClient {
   /** For endpoints that answer 204 and have no body to parse. */
   private async requestNoContent(path: string, init: RequestInit = {}): Promise<void> {
     let response = await this.raw(path, init);
-    if (response.status === 401 && this.tokens) {
+    if (response.status === 401) {
       if (await this.refreshOnce()) {
         response = await this.raw(path, init);
       }
@@ -142,11 +151,13 @@ export class VisioVoxClient {
   }
 
   private async doRefresh(): Promise<boolean> {
-    if (!this.tokens) return false;
+    // No stored refresh token is needed: it rides as an httpOnly cookie that
+    // this code cannot read, which is the point. `credentials: 'include'` is
+    // what attaches it on a cross-origin call.
     const response = await this.fetchImpl(`${this.baseUrl}/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refresh_token: this.tokens.refreshToken }),
+      credentials: 'include',
     });
     if (!response.ok) {
       // Reuse detection revokes the family, so there is nothing to retry with.
@@ -156,7 +167,9 @@ export class VisioVoxClient {
     const body = (await response.json()) as TokenResponse;
     this.setTokens({
       accessToken: body.access_token,
-      refreshToken: body.refresh_token,
+      // Empty for browsers: the real one is in the cookie. Kept in the shape so
+      // script clients, which do receive it, still work unchanged.
+      refreshToken: body.refresh_token ?? '',
     });
     return true;
   }
@@ -172,7 +185,7 @@ export class VisioVoxClient {
         ...(displayName !== undefined ? { display_name: displayName } : {}),
       }),
     });
-    this.setTokens({ accessToken: body.access_token, refreshToken: body.refresh_token });
+    this.setTokens({ accessToken: body.access_token, refreshToken: body.refresh_token ?? '' });
     return body;
   }
 
@@ -181,15 +194,17 @@ export class VisioVoxClient {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    this.setTokens({ accessToken: body.access_token, refreshToken: body.refresh_token });
+    this.setTokens({ accessToken: body.access_token, refreshToken: body.refresh_token ?? '' });
     return body;
   }
 
   async logout(): Promise<void> {
-    if (!this.tokens) return;
+    // Runs even with nothing in memory. After a reload the cookie is all that
+    // survives, and returning early would leave a live session on the server
+    // while the interface claims to be signed out.
     await this.requestNoContent('/v1/auth/logout', {
       method: 'POST',
-      body: JSON.stringify({ refresh_token: this.tokens.refreshToken }),
+      body: JSON.stringify({ refresh_token: this.tokens?.refreshToken ?? null }),
     });
     this.setTokens(null);
   }

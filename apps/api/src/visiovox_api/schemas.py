@@ -47,7 +47,9 @@ class TokenResponse(BaseModel):
     # S105 false positive: this is the OAuth2 token *type*, not a secret.
     token_type: Literal["bearer"] = "bearer"  # noqa: S105
     expires_at: dt.datetime
-    refresh_token: str
+    # None for browser clients: delivered as an httpOnly cookie instead,
+    # so no script on any page can read it.
+    refresh_token: str | None = None
     refresh_expires_at: dt.datetime
 
 

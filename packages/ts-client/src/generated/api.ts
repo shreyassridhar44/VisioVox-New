@@ -776,7 +776,7 @@ export interface components {
              */
             refresh_expires_at: string;
             /** Refresh Token */
-            refresh_token: string;
+            refresh_token?: string | null;
             /**
              * Token Type
              * @default bearer
@@ -1061,9 +1061,9 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["RefreshRequest"];
+                "application/json": components["schemas"]["RefreshRequest"] | null;
             };
         };
         responses: {
@@ -1157,9 +1157,9 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["RefreshRequest"];
+                "application/json": components["schemas"]["RefreshRequest"] | null;
             };
         };
         responses: {

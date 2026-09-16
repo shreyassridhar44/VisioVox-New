@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     auth_secret: SecretStr = SecretStr("dev-only-insecure-secret-replace-in-every-real-deployment")
     access_token_ttl_seconds: int = 600
     refresh_token_ttl_days: int = 30
+    # "lax" is right when the app and API share a registrable domain, which
+    # they do behind one tunnel. A genuinely cross-site deployment needs
+    # "none", which browsers only honour together with Secure.
+    refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
     # --- database ---
     database_url: str = "postgresql+asyncpg://visiovox:visiovox@localhost:5432/visiovox"
