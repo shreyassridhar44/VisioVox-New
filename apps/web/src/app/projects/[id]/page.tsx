@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { JobResponse, ProjectResponse } from '@visiovox/ts-client';
 import { accessToken, api } from '@/lib/store';
 import { ExportPanel } from '@/components/ExportPanel';
+import { SharePanel } from '@/components/SharePanel';
 import { ProcessingView } from '@/components/ProcessingView';
 import { Player } from '@/components/Player';
 import type { Manifest } from '@/lib/playback/manifest';
@@ -131,14 +132,24 @@ export default function ProjectPage() {
       {manifest !== null && <Player manifest={manifest} />}
 
       {project.status === 'ready' && (
-        <ExportPanel
-          projectId={projectId}
-          projectTitle={project.title}
-          speakers={Array.from({ length: project.speaker_count ?? 0 }, (_, i) => ({
-            ordinal: i + 1,
-            label: `Speaker ${String(i + 1)}`,
-          }))}
-        />
+        <>
+          <ExportPanel
+            projectId={projectId}
+            projectTitle={project.title}
+            speakers={Array.from({ length: project.speaker_count ?? 0 }, (_, i) => ({
+              ordinal: i + 1,
+              label: `Speaker ${String(i + 1)}`,
+            }))}
+          />
+          <SharePanel
+            projectId={projectId}
+            projectTitle={project.title}
+            speakers={Array.from({ length: project.speaker_count ?? 0 }, (_, i) => ({
+              ordinal: i + 1,
+              label: `Speaker ${String(i + 1)}`,
+            }))}
+          />
+        </>
       )}
 
       {job && (

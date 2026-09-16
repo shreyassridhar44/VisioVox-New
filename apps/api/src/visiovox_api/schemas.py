@@ -8,7 +8,7 @@ both. Responses never carry password hashes, token hashes or raw IPs.
 from __future__ import annotations
 
 import datetime as dt
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
@@ -147,6 +147,44 @@ class UploadStatusResponse(BaseModel):
     part_count: int
     completed_parts: list[int]
     expires_at: dt.datetime
+
+
+class CreateShareRequest(StrictModel):
+    """Create a public link to this project."""
+
+    # None shares every speaker; an ordinal shares only that one.
+    speaker_ordinal: int | None = Field(default=None, ge=1, le=8)
+    # Optional second factor for a link that may travel further than intended.
+    password: str | None = Field(default=None, min_length=4, max_length=128)
+    expires_in_days: int | None = Field(default=30, ge=1, le=365)
+
+
+class ShareResponse(BaseModel):
+    id: str
+    project_id: str
+    speaker_ordinal: int | None
+    # Present exactly once, in the creation response. Only the hash is stored,
+    # so there is no way to show it again later.
+    token: str | None = None
+    has_password: bool
+    access_count: int
+    expires_at: dt.datetime | None
+    revoked_at: dt.datetime | None
+    created_at: dt.datetime
+
+
+class ShareListResponse(BaseModel):
+    items: list[ShareResponse]
+
+
+class SharePublicResponse(BaseModel):
+    """What a stranger holding the link is allowed to see."""
+
+    title: str
+    duration_ms: int | None
+    speaker_count: int
+    speaker_ordinal: int | None
+    manifest: dict[str, Any]
 
 
 class CreateExportRequest(StrictModel):

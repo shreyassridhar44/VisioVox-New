@@ -428,3 +428,55 @@ class Export(Base):
             name="exports_status_check",
         ),
     )
+
+
+class ShareLink(Base):
+    """A revocable public link to one project (docs/28 §W7).
+
+    Durable rather than cached because revocation has to be: a "revoked" share
+    that comes back after a restart is a privacy incident, not a cache miss.
+
+    Only the SHA-256 of the token is stored, for the same reason password hashes
+    are. Anyone who can read this table - an operator, a backup, a leaked dump -
+    would otherwise hold working links to every shared recording.
+    """
+
+    __tablename__ = "share_links"
+
+    id: Mapped[str] = _pk("shr")
+    project_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+
+    # None shares every speaker; an ordinal shares just that one, which is what
+    # someone usually wants when sending a clip of one person talking.
+    speaker_ordinal: Mapped[int | None] = mapped_column(Integer)
+    # Optional second factor for a link that will travel further than intended.
+    password_hash: Mapped[str | None] = mapped_column(Text)
+
+    access_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_accessed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = _now_col()
+
+    __table_args__ = (
+        Index("ix_share_links_project", "project_id"),
+        Index("ix_share_links_user", "user_id"),
+    )
+
+    @property
+    def is_live(self) -> bool:
+        """Whether this link should still open anything.
+
+        Checked in one place so revocation, expiry and deletion cannot disagree
+        about what "live" means.
+        """
+        if self.revoked_at is not None:
+            return False
+        return not (self.expires_at is not None and self.expires_at < dt.datetime.now(dt.UTC))

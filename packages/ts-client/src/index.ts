@@ -28,6 +28,9 @@ export type LimitsResponse = Schemas['LimitsResponse'];
 export type ExportResponse = Schemas['ExportResponse'];
 export type ExportListResponse = Schemas['ExportListResponse'];
 export type RenditionOption = Schemas['RenditionOption'];
+export type ShareResponse = Schemas['ShareResponse'];
+export type ShareListResponse = Schemas['ShareListResponse'];
+export type CreateShareRequest = Schemas['CreateShareRequest'];
 export type CreateExportRequest = Schemas['CreateExportRequest'];
 export type CompletedPart = Schemas['CompletedPart'];
 
@@ -324,6 +327,30 @@ export class VisioVoxClient {
    */
   exportDownloadUrl(projectId: string, exportId: string): string {
     return `${this.baseUrl}/v1/projects/${projectId}/exports/${exportId}/download`;
+  }
+
+  /**
+   * Create a public link.
+   *
+   * The token comes back exactly once, in this response: only its hash is
+   * stored, so there is no endpoint that can show it again.
+   */
+  createShare(projectId: string, body: CreateShareRequest): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/v1/projects/${projectId}/shares`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  listShares(projectId: string): Promise<ShareListResponse> {
+    return this.request<ShareListResponse>(`/v1/projects/${projectId}/shares`);
+  }
+
+  /** Immediate and permanent. */
+  revokeShare(projectId: string, shareId: string): Promise<void> {
+    return this.requestNoContent(`/v1/projects/${projectId}/shares/${shareId}`, {
+      method: 'DELETE',
+    });
   }
 
   eventsUrl(projectId: string): string {

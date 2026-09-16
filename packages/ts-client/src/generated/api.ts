@@ -308,6 +308,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{project_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Shares */
+        get: operations["list_shares_v1_projects__project_id__shares_get"];
+        put?: never;
+        /** Create Share */
+        post: operations["create_share_v1_projects__project_id__shares_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Share
+         * @description Revoke immediately and permanently.
+         *
+         *     Kept as a row rather than deleted, so "this link was revoked on the 14th"
+         *     stays answerable — which is what someone actually wants to know after
+         *     sharing something they regret.
+         */
+        delete: operations["revoke_share_v1_projects__project_id__shares__share_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{project_id}/upload/complete": {
         parameters: {
             query?: never;
@@ -433,6 +475,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/shared/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Share
+         * @description Open a share. No account required; the token is the authorisation.
+         */
+        get: operations["open_share_v1_shared__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -469,6 +531,21 @@ export interface components {
             rights_attested: boolean;
             /** Title */
             title: string;
+        };
+        /**
+         * CreateShareRequest
+         * @description Create a public link to this project.
+         */
+        CreateShareRequest: {
+            /**
+             * Expires In Days
+             * @default 30
+             */
+            expires_in_days: number | null;
+            /** Password */
+            password?: string | null;
+            /** Speaker Ordinal */
+            speaker_ordinal?: number | null;
         };
         /**
          * ErrorResponse
@@ -636,6 +713,53 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
+        };
+        /** ShareListResponse */
+        ShareListResponse: {
+            /** Items */
+            items: components["schemas"]["ShareResponse"][];
+        };
+        /**
+         * SharePublicResponse
+         * @description What a stranger holding the link is allowed to see.
+         */
+        SharePublicResponse: {
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Speaker Count */
+            speaker_count: number;
+            /** Speaker Ordinal */
+            speaker_ordinal: number | null;
+            /** Title */
+            title: string;
+        };
+        /** ShareResponse */
+        ShareResponse: {
+            /** Access Count */
+            access_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Has Password */
+            has_password: boolean;
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Speaker Ordinal */
+            speaker_ordinal: number | null;
+            /** Token */
+            token?: string | null;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -1729,6 +1853,156 @@ export interface operations {
             };
         };
     };
+    list_shares_v1_projects__project_id__shares_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareListResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_share_v1_projects__project_id__shares_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revoke_share_v1_projects__project_id__shares__share_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     upload_complete_v1_projects__project_id__upload_complete_post: {
         parameters: {
             query?: never;
@@ -2011,6 +2285,57 @@ export interface operations {
                             [key: string]: number;
                         };
                     };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    open_share_v1_shared__token__get: {
+        parameters: {
+            query?: {
+                password?: string | null;
+            };
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePublicResponse"];
                 };
             };
             /** @description Unauthorized */

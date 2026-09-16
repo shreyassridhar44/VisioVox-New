@@ -35,6 +35,7 @@ from .redis_client import close_redis, get_redis
 from .routes_exports import router as exports_router
 from .routes_media import limits_router
 from .routes_media import router as media_router
+from .routes_share import router as share_router
 from .schemas import (
     CreateProjectRequest,
     ErrorResponse,
@@ -436,3 +437,4 @@ app.include_router(projects)
 app.include_router(media_router)
 app.include_router(limits_router)
 app.include_router(exports_router)
+app.include_router(share_router)
