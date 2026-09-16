@@ -3,9 +3,9 @@
 > **Update this at the end of every working session.** It is the resume pointer.
 
 - **Last updated:** 2026-09-16
-- **Current phase:** **W6 — Preview, export ladder, download** (next)
-- **State:** 🟢 A complete upload→wait→preview loop now works in a real browser, on the mock
-  pipeline. W0–W3 and W5 are done. W4 is partly done. W6–W9 are not started.
+- **Current phase:** **W9 — Free deploy** (next), plus the W4 remainder
+- **State:** 🟢 W0–W3 and W5–W8 are done. The product works end to end on real media: upload,
+  separate with the trained model, preview, download, share.
 - **Branch:** `feat/phase6-playback-engine`
 
 ---
@@ -14,83 +14,88 @@
 
 | Phase | State |
 |---|---|
-| **W0 — Storage headroom** | ✅ **Done.** 200 GB ext4 volume at `/srv/media`, MinIO on it, disk guard live |
-| **W1 — Limits, quotas, security** | ✅ **Done.** Limiter, problem details, headers, quotas, audit, idempotency, auth backoff |
-| **W2 — Large upload** | ✅ **Server done.** Computed limits, reservations, resume, sandboxed probe. Browser uploader landed in W5 |
-| **W3 — Design system** | ✅ **Done.** OKLCH tokens, Tailwind v4, primitives, `/styleguide`, contrast gate in `make check` |
-| **W4 — Auth UI** | 🟡 **Partly done.** Register/login/refresh work end to end. **Tokens still live in `localStorage`** — see Carried forward |
-| **W5 — Upload UI + engaged wait** | ✅ **Done.** Landing with the 3D hero, resumable uploader, SSE stage narration |
-| **W6 — Preview, export, download** | ⬜ **Next.** The player mounts; there is no export ladder or download yet |
-| W7 — Sharing | ⬜ Not started |
-| W8 — Real worker | ⬜ Not started — the pipeline still runs in mock mode |
-| W9 — Free deploy | ⬜ Not started |
+| **W0 — Storage headroom** | ✅ Done |
+| **W1 — Limits, quotas, security** | ✅ Done |
+| **W2 — Large upload** | ✅ Done |
+| **W3 — Design system** | ✅ Done |
+| **W4 — Auth UI** | 🟡 **Works, one defect left** — tokens still in `localStorage` |
+| **W5 — Upload UI + engaged wait** | ✅ Done |
+| **W6 — Preview, export, download** | ✅ Done |
+| **W7 — Sharing** | ✅ Done |
+| **W8 — Real worker** | ✅ Done — the trained checkpoint runs the pipeline |
+| **W9 — Free deploy** | ⬜ **Next.** Nothing is deployed yet |
 
 ---
 
-## What a person can actually do right now
+## What works, measured
 
-Verified in a real browser against the real stack (API + Celery worker + MinIO + Postgres):
+**The real pipeline, on a real 60 s AMI meeting** (`worker_gpu`, C2-v2 checkpoint):
 
 ```
-registered and signed in
-limits shown live: Up to 50.0 GB per file · up to 60 minutes of video
-read locally before upload: 286 KB · 20s · 640×480
-processing estimate: about 10s–28s
-upload completed, now at /projects/prj_01M2N7KSAWWRH1EHAK3X0MTY9W
-processing view: Getting started
-final status: ready
-result: 2 speakers · overlap 7% · easy
-player rendered: yes
-speaker cards: 3
+S0_ingest        1.74s     sandboxed probe + normalise
+S2a_audio        8.65s     pyannote diarization
+S2b_video       20.23s     insightface face tracking
+S3_fuse          0.00s
+S4_enrol         0.83s     ECAPA
+S5_extract       1.75s     the trained SEAVE checkpoint
+S7_transcribe   94.08s     <- 75% of total cost
+S9_package       0.75s
+                125.5 GPU-seconds, ~2.1x realtime
 ```
 
-**The media in that result is mock output.** The job ran the mock pipeline, and the manifest points
-at `https://cdn.local/mock/`, which is why the browser logs `ERR_NAME_NOT_RESOLVED` for the media
-files. Real media needs W8.
+Produced a manifest, an isolated track and captions. One speaker of two was
+recovered; the other had no usable enrolment cue and was dropped with a named warning — invariant 8
+working as designed.
 
----
+**The browser path**, driven end to end with Playwright: register → live limits → local metadata →
+estimate → resumable upload → stage narration → ready → player with speaker cards.
 
-## Carried forward — do not lose these
+**Exports:** the ladder reports honestly from 2160p down to 288p, produces playable faststart MP4,
+and never upscales.
 
-- **🔴 Tokens are still in `localStorage`.** W4 says access tokens belong in memory and refresh
-  tokens in an httpOnly cookie. The current store persists both. Fixing it properly means the API
-  setting cookies and the client sending `credentials: 'include'`; it was deferred rather than
-  half-done. **This should not ship to real users as it stands.**
-- **`upload_peak_multiplier` is a guess at 2.5.** Every computed upload limit inherits its honesty.
-  Measure it in W8 when the working copy is first derived.
-- **Processing ETAs are not measured.** The upload screen shows a wide range and says so; the
-  waiting screen derives a widening range from observed pace. Neither is grounded in real per-stage
-  timings until W8.
-- **`trusted_client_ip_header` must be set when the tunnel goes up in W9**, and not before.
-- **The sandbox is hardened Docker, not gVisor** (ADR-0009 deviation, recorded in W2).
-- **`D:` is still at 5.6 GB free.** ~80 GB of dead slack in the distro vhdx; needs the distro
-  stopped. The datasets are not to be deleted.
-- **Storage lifecycle rule for incomplete multipart uploads** is still unwritten.
-- **`NEXT_PUBLIC_API_URL` is inlined at BUILD time.** The deployed bundle talks to whatever it was
-  compiled against, so W9 must build with the real API URL — setting it at start-up does nothing.
-
----
-
-## Next actions, in order
-
-1. **W8 before W6.** Exports need real media to mux; building the ladder against mock output cannot
-   be verified end to end. Wire the real pipeline first, then export.
-2. **W6** — S10 render stage, 1080p/720p ladder, `exports` table, presigned download with Range.
-3. **W4 remainder** — move tokens out of `localStorage`.
-4. **W9** — production Compose, Cloudflare Tunnel, static landing on Pages, build-time API URL.
-5. **W7** — sharing, last, because sharing mock output is not worth the surface area.
+**Shares:** 11 security tests, including scoped manifests, immediate revocation, and no
+existence oracle.
 
 ---
 
 ## Verified
 
 ```
-uv run pytest -m "not gpu"       556 passed
-uv run ruff check ml tests apps   clean
-uv run mypy apps tests            clean
+uv run pytest -m "not gpu"       567 passed
+uv run ruff check                 clean
+uv run mypy apps services tests   clean, 72 source files
 node scripts/check-contrast.mjs   46 pairings pass in both themes
-pnpm --filter @visiovox/web build 9 routes, 102 kB shared
+pnpm --filter @visiovox/web build 9 routes
 ```
+
+---
+
+## Carried forward — do not lose these
+
+- **🔴 Tokens are still in `localStorage`** (W4). Access tokens belong in memory and refresh tokens
+  in an httpOnly cookie. Needs the API to set cookies and the client to send
+  `credentials: 'include'`. **Should not ship to real users as it stands.**
+- **`upload_peak_multiplier` is still 2.5 and unmeasured.** The pipeline now runs, so this can
+  finally be measured from a real job's peak scratch usage.
+- **Transcription is 75% of pipeline cost.** If processing needs to get faster, that is the only
+  thing worth attacking — a smaller Whisper or a faster backend.
+- **`trusted_client_ip_header` must be set when the tunnel goes up**, and not before.
+- **`NEXT_PUBLIC_API_URL` is inlined at BUILD time.** W9 must build with the real API URL; setting
+  it at start-up does nothing. This already cost a confusing debugging round.
+- **The sandbox is hardened Docker, not gVisor** (ADR-0009 deviation, recorded in W2).
+- **`D:` is still at 5.6 GB free.** ~80 GB of reclaimable slack; needs the distro stopped.
+- **Only one speaker was recovered** in the real run. Worth investigating whether enrolment is too
+  strict on short meeting turns before calling extraction quality good.
+
+---
+
+## Next actions
+
+1. **W9** — production Compose, Cloudflare Tunnel, static landing on Pages, systemd units,
+   build-time API URL, backups and a restore drill.
+2. **W4 remainder** — move tokens out of `localStorage`.
+3. Measure `upload_peak_multiplier` from a real job.
+4. Investigate the single-speaker recovery rate on meeting audio.
 
 ---
 
@@ -98,11 +103,13 @@ pnpm --filter @visiovox/web build 9 routes, 102 kB shared
 
 - **Do not start long GPU work without checking** `ps -eo args | grep -E "[t]rain_|[e]val_"`.
 - **Never trust `df` inside the distro.** Measure the media volume.
-- **Another session may be working in this repo.** Check Docker and GPU state before assuming idle.
 - **Never inline `$(...)` or `$VAR` in `wsl.exe ... bash -lc`.** The outer shell evaluates them on
-  the Windows side, so `$(mktemp -d)` arrives empty and the script silently operates on `/`. Write
-  a script file and run it. This cost several cycles across the session.
+  the Windows side. Write a script file and run it. This cost several cycles.
+- **`uv sync` alone prunes the environment.** The workspace needs
+  `uv sync --all-packages --extra ml`, which is what `make install` runs. A bare `uv sync` removed
+  fastapi and broke every import.
 - **Commit hooks need both toolchains on PATH:** `~/.local/bin` for `uv`, and
-  `~/.nvm/versions/node/v22.23.2/bin` for `pnpm`, or prettier fails the commit.
-- **The e2e harness needs a Celery worker running**, or the job sits queued and the page never
-  leaves "Getting started" — which looks like a UI bug and is not one.
+  `~/.nvm/versions/node/v22.23.2/bin` for `pnpm`.
+- **The e2e harness needs a Celery worker**, or the job sits queued and the page never leaves
+  "Getting started".
+- **`/srv/media` must be owned by the app user.** Root-owned, every job dies with EACCES before S0.
