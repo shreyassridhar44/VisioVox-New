@@ -109,8 +109,17 @@ log "Mounting via systemd ($UNIT)"
 systemctl daemon-reload
 systemctl start "$UNIT"
 
-chmod 0775 "$MOUNT_POINT"
-mkdir -p "$MOUNT_POINT/minio"
+# The volume is the application's own storage, so it belongs to the user the
+# API and workers run as. Left owned by root, every job dies with EACCES
+# creating its scratch directory, before stage S0 runs.
+OWNER="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
+chown "$OWNER:$OWNER" "$MOUNT_POINT"
+chmod 0755 "$MOUNT_POINT"
+
+mkdir -p "$MOUNT_POINT/work" "$MOUNT_POINT/projects" "$MOUNT_POINT/minio"
+chown "$OWNER:$OWNER" "$MOUNT_POINT/work" "$MOUNT_POINT/projects"
+chmod 0775 "$MOUNT_POINT/work" "$MOUNT_POINT/projects"
+# MinIO runs as its own uid inside its container.
 chmod 0777 "$MOUNT_POINT/minio"
 
 # --- verify -----------------------------------------------------------------

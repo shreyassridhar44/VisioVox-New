@@ -131,7 +131,7 @@ exclude = ['ml/notebooks/', '\.venv/']
 # Celery ships no type stubs, so @celery_app.task reads as an untyped decorator
 # under strict mode. Scoped to the task module rather than relaxed globally.
 [[tool.mypy.overrides]]
-module = ["worker_cpu.tasks"]
+module = ["worker_cpu.tasks", "worker_gpu.tasks"]
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]

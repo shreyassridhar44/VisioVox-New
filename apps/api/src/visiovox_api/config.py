@@ -81,6 +81,24 @@ class Settings(BaseSettings):
     # --- pipeline ---
     pipeline_mode: PipelineMode = "mock"
     extractor_version: str = "seave-0.1.0"
+    # The trained SEAVE checkpoint the GPU worker loads. Pinned by path rather
+    # than discovered, so a job records which weights produced it.
+    extractor_checkpoint: str = "~/runs/c2-v2/best.pt"
+    # "cuda" on the workstation, "cpu" anywhere else. Stage code falls back on
+    # its own if CUDA is absent, but being explicit keeps CI honest.
+    torch_device: str = "cuda"
+    # Confinement image for ffmpeg/ffprobe on user media (ADR-0009).
+    media_sandbox_image: str = "visiovox/media-sandbox:1"
+    # ECAPA, for scoring enrolment regions. Read from a local directory so a
+    # job never depends on the network.
+    speaker_embedder_source: str = "speechbrain/spkrec-ecapa-voxceleb"
+    speaker_embedder_dir: str = "~/models/ecapa"
+    # pyannote diarization is gated; without a token S2a degrades to VAD only
+    # and the pipeline falls back to single-speaker handling.
+    hf_token: SecretStr = SecretStr("")
+    # Where packaged artifacts are served from. The packager writes bare
+    # filenames; this is the one place that decides how they are reached.
+    public_media_base_url: str = "http://localhost:9000/visiovox-media"
 
     # --- media volume (docs/track-w/W0) ---
     # Where uploads and derived artifacts live. This must be a dedicated
@@ -88,6 +106,10 @@ class Settings(BaseSettings):
     # virtual maximum rather than real free space, which is how a disk check
     # passes on a full drive.
     media_root: str = "/srv/media"
+    # Job scratch. A subdirectory rather than the volume root, because the root
+    # also holds MinIO's data and the served artifacts, and a job's temporary
+    # tree must be safe to delete wholesale without touching either.
+    media_work_dir: str = "/srv/media/work"
     # Held back from the usable figure. A job needs source, working copy and
     # outputs on disk at once; running the volume to zero corrupts whatever is
     # mid-write, not only the job that overshot.

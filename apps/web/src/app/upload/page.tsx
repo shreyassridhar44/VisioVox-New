@@ -32,16 +32,23 @@ interface Inspected {
 }
 
 /**
- * Rough processing estimate.
+ * Processing estimate, from a measured run.
  *
- * Deliberately a RANGE, and deliberately wide. Real per-stage timings are not
- * measured until the pipeline runs for real (W8), and a single confident number
- * derived from a guess is worse than an honest interval — people plan around
- * the number you show them.
+ * Grounded in a real 60 s AMI meeting on the A5000: 125.5 GPU-seconds for 60 s
+ * of audio, so roughly 2.1x realtime end to end. Transcription alone was 94 s of
+ * that — three quarters of the cost — which is why the multiplier is this high
+ * and why it barely moves with speaker count.
+ *
+ * Still a RANGE, and still wide, because one measurement on one recording is
+ * not a model: a quiet two-person interview and a noisy four-person meeting sit
+ * at opposite ends of it. A single confident number derived from one sample is
+ * worse than an honest interval, since people plan around whatever is shown.
  */
+const MEASURED_RTF = 2.1;
+
 function estimateProcessing(durationSeconds: number | null): [number, number] | null {
   if (durationSeconds === null) return null;
-  return [durationSeconds * 0.5, durationSeconds * 1.4];
+  return [durationSeconds * MEASURED_RTF * 0.7, durationSeconds * MEASURED_RTF * 1.6];
 }
 
 export default function UploadPage() {
@@ -266,7 +273,8 @@ export default function UploadPage() {
           )}
 
           <p className="text-xs text-fg-muted">
-            Processing time is an estimate and will get more accurate as we measure real runs.
+            Processing time is an estimate from measured runs, and varies with how much people talk
+            over each other.
           </p>
 
           <label className="flex items-start gap-2 text-sm">

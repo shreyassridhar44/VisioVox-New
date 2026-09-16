@@ -371,23 +371,31 @@ async def upload_complete(
     )
     await session.commit()
 
-    _enqueue(job.id)
+    _enqueue(job.id, settings.pipeline_mode)
     return {"job_id": job.id, "status": "queued"}
 
 
-def _enqueue(job_id: str) -> None:
-    """Hand the job to Celery.
+def _enqueue(job_id: str, mode: str) -> None:
+    """Hand the job to the right queue.
 
-    Imported lazily and failures are swallowed into a log-shaped response,
-    because the API must stay up when the broker is not — the job row already
-    exists and can be retried.
+    Imported lazily and failures are swallowed, because the API must stay up
+    when the broker is not — the job row already exists and can be retried.
+
+    Real jobs go to a dedicated `gpu` queue served by a single-concurrency
+    worker. The mock keeps its own queue so a developer without a GPU still has
+    a working application.
     """
     try:
-        from worker_cpu.tasks import run_mock_pipeline
+        if mode == "real":
+            from worker_gpu.tasks import enqueue
 
-        run_mock_pipeline.delay(job_id)
+            enqueue(job_id)
+        else:
+            from worker_cpu.tasks import run_mock_pipeline
+
+            run_mock_pipeline.delay(job_id)
     except Exception:
-        return
+        logger.warning("could not enqueue job %s (mode=%s)", job_id, mode, exc_info=True)
 
 
 @router.get("/{project_id}/manifest")
