@@ -1,28 +1,98 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Tailwind v4 reads its scale from @theme. Mapping it onto the same custom
+ * properties the hand-written CSS uses means there is exactly one palette:
+ * a utility class and a component class cannot drift apart. */
+@theme inline {
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-inset: var(--bg-inset);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+
+  --color-fg-primary: var(--fg-primary);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-muted: var(--fg-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-contested: var(--contested);
+
+  --color-spk-1: var(--spk-1);
+  --color-spk-2: var(--spk-2);
+  --color-spk-3: var(--spk-3);
+  --color-spk-4: var(--spk-4);
+  --color-spk-mixed: var(--spk-mixed);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+}
+
+/* Aliases kept deliberately. The player shipped against these names and is
+ * ~1200 tested lines; repointing them at the token palette migrates the colours
+ * without touching a single component. */
 :root {
-  --bg: #0e1116;
-  --panel: #161b22;
-  --border: #2b3138;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #4c8dff;
-  --ok: #3fb950;
-  --warn: #d29922;
+  --bg: var(--bg-base);
+  --panel: var(--bg-surface);
+  --border: var(--border-subtle);
+  --text: var(--fg-primary);
+  --muted: var(--fg-muted);
+  --ok: var(--success);
+  --warn: var(--warning);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  /* Anchor navigation should not slam; the header is sticky. */
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font:
-    15px/1.55 system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
+  background: var(--bg-base);
+  color: var(--fg-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Timecodes, byte counts and metrics must not jitter as digits change. */
+.tabular,
+output,
+time,
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* A visible focus ring everywhere, not only where someone remembered it. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .header {
@@ -30,17 +100,12 @@ body {
   gap: 1.5rem;
   align-items: center;
   padding: 0.9rem 1.25rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .brand {
   font-weight: 650;
   letter-spacing: -0.01em;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
 }
 
 nav a:hover {
@@ -54,9 +119,9 @@ nav a:hover {
 }
 
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   padding: 1.25rem;
 }
 
@@ -67,7 +132,7 @@ nav a:hover {
 label {
   display: block;
   font-size: 0.85rem;
-  color: var(--muted);
+  color: var(--fg-muted);
   margin-bottom: 0.3rem;
 }
 
@@ -76,20 +141,31 @@ input[type='password'],
 input[type='text'] {
   width: 100%;
   padding: 0.6rem 0.7rem;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: #0d1117;
-  color: var(--text);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-inset);
+  color: var(--fg-primary);
+  font: inherit;
+}
+
+input:focus-visible {
+  border-color: var(--accent);
 }
 
 button {
   padding: 0.6rem 1rem;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: var(--accent);
-  color: #fff;
+  color: oklch(0.15 0.01 265);
+  font: inherit;
   font-weight: 550;
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 button:disabled {
@@ -98,11 +174,11 @@ button:disabled {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--fg-muted);
 }
 
 .error {
-  color: #f85149;
+  color: var(--danger);
   font-size: 0.9rem;
 }
 
@@ -115,30 +191,30 @@ button:disabled {
 
 .bar {
   height: 8px;
-  background: #0d1117;
-  border-radius: 999px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-full);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
 }
 
 .bar > span {
   display: block;
   height: 100%;
   background: var(--accent);
-  transition: width 220ms ease;
+  transition: width var(--dur-normal) var(--ease-out);
 }
 
 .badge {
   font-size: 0.75rem;
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  color: var(--fg-muted);
 }
 
 .badge.ready {
-  color: var(--ok);
-  border-color: var(--ok);
+  color: var(--success);
+  border-color: var(--success);
 }
 
 table {
@@ -150,19 +226,20 @@ td,
 th {
   text-align: left;
   padding: 0.5rem 0.4rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.9rem;
 }
 
 /* ---------------------------------------------------------------- player --
-   The speaker rail is the product's one irreducible interaction, so it gets
-   the affordances: a real focus ring, a selected state legible without
-   colour alone, and hit targets big enough to be worth clicking. */
+   The restrained surface (docs/28 §D1). The speaker rail is the product's one
+   irreducible interaction, so it gets the affordances: a real focus ring, a
+   selected state legible without colour alone, and hit targets worth clicking.
+   Nothing here glows. */
 
 .stage {
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: oklch(0 0 0);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -171,7 +248,7 @@ th {
   display: block;
   width: 100%;
   max-height: 60vh;
-  background: #000;
+  background: oklch(0 0 0);
 }
 
 .stage-audio-only {
@@ -191,16 +268,21 @@ th {
   gap: 0.35rem;
   padding: 0.6rem;
   text-align: left;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 9px;
-  color: var(--text);
+  color: var(--fg-primary);
   font-weight: 400;
   cursor: pointer;
+  /* Matches the audio crossfade exactly, so the switch is one event. */
+  transition:
+    border-color var(--dur-instant) var(--ease-out),
+    box-shadow var(--dur-instant) var(--ease-out);
 }
 
 .rail-item:hover:not(:disabled) {
   border-color: var(--accent);
+  background: var(--bg-surface);
 }
 
 .rail-item:focus-visible {
@@ -217,15 +299,15 @@ th {
   width: 100%;
   aspect-ratio: 16 / 10;
   object-fit: cover;
-  border-radius: 6px;
-  background: #0d1117;
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
 }
 
 .rail-face-none {
   display: grid;
   place-items: center;
   font-size: 1.1rem;
-  color: var(--muted);
+  color: var(--fg-muted);
 }
 
 .rail-label {
@@ -237,12 +319,14 @@ th {
   font-size: 0.75rem;
 }
 
+/* Captions are larger than body text on purpose (docs/14 §3): they are the
+   product, not a footnote. */
 .captions {
   margin: 0;
   min-height: 3.2rem;
   padding: 0.75rem 0.9rem;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 9px;
   font-size: 1.05rem;
   line-height: 1.5;
@@ -270,7 +354,7 @@ th {
 
 .word-on {
   background: var(--accent);
-  color: #fff;
+  color: oklch(0.15 0.01 265);
 }
 
 .word:focus-visible {
@@ -285,22 +369,22 @@ th {
 
 .seg {
   display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .seg button {
   border-radius: 0;
-  background: var(--panel);
-  color: var(--muted);
+  background: var(--bg-surface);
+  color: var(--fg-muted);
   font-size: 0.85rem;
   padding: 0.4rem 0.8rem;
 }
 
 .seg .seg-on {
   background: var(--accent);
-  color: #fff;
+  color: oklch(0.15 0.01 265);
 }
 
 .offset {
@@ -309,17 +393,15 @@ th {
   gap: 0.5rem;
   margin: 0;
   font-size: 0.8rem;
-  color: var(--muted);
+  color: var(--fg-muted);
 }
 
 .offset output {
-  font-variant-numeric: tabular-nums;
   min-width: 4.5rem;
 }
 
 .drift {
   font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Shown only on the HLS path, where a rendition switch really does silence
@@ -327,22 +409,27 @@ th {
 .switching {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--warn);
+  color: var(--warning);
 }
 
 .code-block {
   margin: 0;
   padding: 0.7rem 0.85rem;
-  background: #0d1117;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   overflow-x: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bar > span {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .bar > span,
+  .rail-item {
     transition: none;
   }
 }

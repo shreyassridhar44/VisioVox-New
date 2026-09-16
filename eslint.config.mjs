@@ -30,15 +30,20 @@ export default tseslint.config(
     },
   },
   {
-    // Build config files run under Node, not in the browser, and are not part
-    // of any tsconfig project, so type-aware linting cannot apply to them.
-    files: ['**/*.config.{js,mjs,cjs,ts}'],
+    // Build config files and standalone Node scripts run outside the browser
+    // and outside any tsconfig project, so type-aware linting cannot apply.
+    files: ['**/*.config.{js,mjs,cjs,ts}', 'scripts/**/*.mjs'],
     // Spread first: disableTypeChecked carries its own languageOptions and
     // would otherwise clobber the globals set here.
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,
-      globals: { process: 'readonly', __dirname: 'readonly', module: 'writable' },
+      globals: {
+        process: 'readonly',
+        __dirname: 'readonly',
+        module: 'writable',
+        console: 'readonly',
+      },
     },
   },
   {

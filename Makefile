@@ -65,7 +65,10 @@ contracts-check:  ## Fail if the committed contract is stale
 eval-quick:  ## 30-item ML eval; gates on regression
 	$(UV) run python -m eval.quick
 
-check: lint typecheck test contracts-check  ## Everything CI runs
+contrast:  ## Fail if any token pairing drops below its contrast threshold
+	node scripts/check-contrast.mjs
+
+check: lint typecheck test contracts-check contrast  ## Everything CI runs
 
 datasets:  ## Resume dataset acquisition and generation in the background
 	@# setsid, not tmux: a dead tmux server once killed three multi-hour
