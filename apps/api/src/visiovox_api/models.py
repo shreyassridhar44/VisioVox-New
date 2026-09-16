@@ -251,3 +251,124 @@ class JobStage(Base):
         Index("uq_job_stage_version", "job_id", "stage", "version", unique=True),
         CheckConstraint(_in_list("status", STAGE_STATUSES), name="job_stages_status_check"),
     )
+
+
+class UsageCounter(Base):
+    """Metered consumption, per user, per metric, per period (docs/15 §9).
+
+    In Postgres rather than Redis because quota enforcement must be atomic
+    across API replicas and must survive eviction: a counter that resets when
+    the cache is under pressure is not a quota. Redis holds rate-limit windows,
+    which are allowed to be approximate; this is not.
+
+    `period_key` is the calendar bucket the metric is counted in - "2026-09-16"
+    for daily, "2026-09" for monthly. Storing the bucket rather than a rolling
+    window keeps increments to a single upsert and makes the row directly
+    readable when a user asks why they were refused.
+    """
+
+    __tablename__ = "usage_counters"
+
+    id: Mapped[str] = _pk("usc")
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    metric: Mapped[str] = mapped_column(Text, nullable=False)
+    period_key: Mapped[str] = mapped_column(Text, nullable=False)
+    value: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        # The upsert target. Without this, concurrent increments create
+        # duplicate rows and the quota silently doubles.
+        Index("uq_usage_user_metric_period", "user_id", "metric", "period_key", unique=True),
+        CheckConstraint("value >= 0", name="usage_counters_value_check"),
+    )
+
+
+class AuditEvent(Base):
+    """Append-only security record (docs/15 §10).
+
+    Retained a year. Account deletion nulls `user_id` but preserves the row -
+    erasure of identity, retention of the security record.
+
+    IPs are stored hashed, never raw, and the table deliberately has no column
+    that could hold media, transcript text or an embedding.
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[str] = _pk("aud")
+    user_id: Mapped[str | None] = mapped_column(Text, ForeignKey("users.id", ondelete="SET NULL"))
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    target_type: Mapped[str | None] = mapped_column(Text)
+    target_id: Mapped[str | None] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(Text, nullable=False, server_default="success")
+    ip_hash: Mapped[str | None] = mapped_column(Text)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    correlation_id: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[dt.datetime] = _now_col()
+
+    __table_args__ = (
+        Index("ix_audit_user_created", "user_id", "created_at"),
+        Index("ix_audit_action_created", "action", "created_at"),
+        CheckConstraint(
+            _in_list("outcome", ("success", "failure", "denied")),
+            name="audit_events_outcome_check",
+        ),
+    )
+
+
+class UploadSession(Base):
+    """A multipart upload in flight (docs/28 §W2).
+
+    Server-side part state is what makes a large upload resumable across a
+    browser refresh: without it the part list lives only in the tab that started
+    the upload, and a reload means starting a multi-GB transfer again.
+
+    `reserved_bytes` is the disk headroom claimed at init and released on
+    complete, abort or expiry. Rate-limiting /upload/init is not enough on its
+    own - each init creates a real multipart upload that occupies storage even
+    if never completed, so the space has to be booked, not merely counted.
+    """
+
+    __tablename__ = "upload_sessions"
+
+    id: Mapped[str] = _pk("upl")
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    upload_id: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(Text)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    part_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    part_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    reserved_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    # [{"part_number": 1, "etag": "..."}] - completed parts, so a resumed upload
+    # knows what to skip.
+    completed_parts: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[dt.datetime] = _now_col()
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_upload_sessions_user_status", "user_id", "status"),
+        Index("uq_upload_sessions_upload_id", "upload_id", unique=True),
+        CheckConstraint(
+            _in_list("status", ("active", "completed", "aborted", "expired")),
+            name="upload_sessions_status_check",
+        ),
+    )

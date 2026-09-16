@@ -1,6 +1,6 @@
 # W1 — Foundation: limits, quotas, headers, idempotency
 
-**State:** 🟡 In progress — rate limiting, problem details and security headers landed
+**State:** 🟡 In progress — limiting, problem details, headers, quotas and audit landed; idempotency and auth backoff remain
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W1
 **Depends on:** W0 ✅
 
@@ -21,8 +21,10 @@ with no correlation id.
 - [x] Global 1000/min per-IP limit, applied before routing
 - [x] `/auth/login` limited on ip+email; `/auth/refresh` limited on the hashed token
 - [ ] Exponential backoff on repeated auth failure, keyed on account
-- [ ] Migration: `usage_counters`, `audit_events`, `upload_sessions`
-- [ ] Quota service — uploads/day, media-minutes/month, GPU-seconds/month, concurrent jobs
+- [x] Migration: `usage_counters`, `audit_events`, `upload_sessions` — `612347771b6e`, applied
+- [x] Quota service — uploads/day, media-seconds/month, GPU-seconds/month, concurrent jobs — `quotas.py`
+- [x] Audit log module with salted IP hashing — `audit.py`
+- [x] `QuotaExceededError` surfaced as a problem document naming the metric and its reset
 - [ ] `Idempotency-Key` on creating POSTs, Redis-backed, 24 h replay window
 - [ ] Audit logging for the docs/15 §10 event list, with hashed IPs
 - [ ] `/upload/init` and `/exports` limits (wired when those endpoints gain their W2/W6 shape)
@@ -89,6 +91,32 @@ uv run mypy apps/api/src/visiovox_api/                                clean
 
 ---
 
+## Decisions made while building — quotas
+
+- **2026-09-16 — quota counters are in Postgres, rate-limit windows are in Redis.** Enforcement has
+  to be atomic across replicas and survive eviction. A quota that resets under cache memory pressure
+  is not a quota. Rate-limit windows are allowed to be approximate; these are not.
+- **2026-09-16 — the increment happens *before* the check, and a refusal relies on the rollback.**
+  Upsert-then-compare in one transaction means two concurrent requests cannot both read "under the
+  limit": the second serialises behind the first and sees the incremented value. Raising discards
+  the increment with the transaction, so a refused request is not charged. Pinned by
+  `test_a_refused_request_is_not_charged` — if that regresses, a user who hits their limit once can
+  never use the service again.
+- **2026-09-16 — no per-plan branching.** Limits are flat config values, because whether plans exist
+  is still open (D6.1). Adding a plan dimension now would be structure built for a decision nobody
+  has made.
+- **2026-09-16 — concurrency is counted from `jobs`, not a counter.** A counter drifts every time a
+  worker dies without decrementing it, and workers die. The jobs table is the authoritative answer
+  to "how many are running".
+- **2026-09-16 — calendar buckets, not rolling windows.** One upsert per charge, and the stored row
+  is directly readable when a user asks why they were refused. The cost is a shared reset instant,
+  which is what the published limits already describe.
+- **2026-09-16 — audit writes are best-effort and never raise.** A dropped audit row is a real gap
+  in the security record; that trade is taken because the alternative is a full disk or a schema
+  drift becoming an outage of the whole API.
+
+---
+
 ## Gotchas
 
 - **`remaining` goes negative internally and is clamped only in the headers.** That is deliberate —
@@ -97,6 +125,13 @@ uv run mypy apps/api/src/visiovox_api/                                clean
 - **`status.HTTP_422_UNPROCESSABLE_ENTITY` is deprecated in current Starlette** and renamed to
   `..._CONTENT`. Using the literal `422` avoids coupling to whichever name the installed version
   happens to have.
+- **`session.rollback()` expires every ORM object in the session.** Reading `user.id` after a
+  rollback triggers a lazy load and fails with `MissingGreenlet`, which reads like an async-context
+  bug rather than what it is. Bind ids to locals before any rollback.
+- **`ruff` flags `TOKEN_REUSE_DETECTED = "auth.token_reuse_detected"` as a hardcoded password**
+  (S105). It is an action name; the `noqa` says so.
+- **Exception names need an `Error` suffix** here (N818), matching `AuthError`, `StorageError`,
+  `DiskLayoutError`. Hence `QuotaExceededError`.
 - **The fake Redis in the tests does not validate the client API.** `pipeline()` methods on
   redis-py are synchronous and return the pipeline; only `execute()` is awaited. A fake that
   accepts anything would hide getting that wrong, which is why the live check above exists.

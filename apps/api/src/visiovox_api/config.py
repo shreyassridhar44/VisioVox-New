@@ -99,6 +99,23 @@ class Settings(BaseSettings):
     # the deployed workstation, which is the machine whose df lies.
     require_dedicated_media_volume: bool = False
 
+    # --- quotas (docs/15 §9) ---
+    # One set of limits for everyone: whether plans exist at all is still open
+    # (docs/track-w DECISIONS.md D6.1), and a plan dimension added now would be
+    # structure built for a decision nobody has made.
+    #
+    # Nothing is rented, so exceeding these costs GPU time and disk rather than
+    # money. The controls are the same; what they protect is queue fairness.
+    quota_uploads_per_day: int = 20
+    quota_media_seconds_per_month: int = 36_000  # 10 hours of source media
+    quota_gpu_seconds_per_month: int = 36_000  # 10 GPU-hours
+    quota_concurrent_jobs: int = 2
+
+    # Salt for hashing IPs before they reach the audit log. The IPv4 space is
+    # small enough to exhaust, so an unsalted hash is decorative. Rotate it and
+    # historical addresses become permanently unlinkable, which is the point.
+    audit_ip_salt: SecretStr = SecretStr("dev-only-audit-salt-replace-in-production")
+
     # --- limits ---
     # A backstop against one absurd upload, not the limit shown to users: that
     # is computed from live headroom (docs/28 D2).

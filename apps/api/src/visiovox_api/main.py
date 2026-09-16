@@ -16,6 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from . import auth_service, problems
@@ -28,6 +29,7 @@ from .middleware import (
     SecurityHeadersMiddleware,
 )
 from .models import Job, JobStage, Project
+from .quotas import QuotaExceededError
 from .ratelimit import RULES, RateLimiter, client_ip, enforce
 from .redis_client import close_redis, get_redis
 from .routes_media import router as media_router
@@ -75,6 +77,29 @@ _limiter = RateLimiter(get_redis(_settings), _settings)
 app.add_exception_handler(HTTPException, problems.http_exception_handler)
 app.add_exception_handler(RequestValidationError, problems.validation_exception_handler)
 app.add_exception_handler(Exception, problems.unhandled_exception_handler)
+
+
+async def _quota_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A quota refusal must say what ran out and when it comes back.
+
+    "Too many requests" with no number is the least actionable error a product
+    can return; the user cannot tell whether to retry in a minute or next month.
+    """
+    assert isinstance(exc, QuotaExceededError)
+    return problems.problem(
+        request,
+        429,
+        f"You have used {exc.used} of {exc.limit} {exc.metric.replace('_', ' ')} for this period.",
+        code="QUOTA_EXCEEDED",
+        title="Quota exceeded",
+        headers={"Retry-After": str(exc.resets_in_seconds)},
+        metric=exc.metric,
+        used=exc.used,
+        limit=exc.limit,
+    )
+
+
+app.add_exception_handler(QuotaExceededError, _quota_handler)
 
 # Starlette wraps later-added middleware AROUND earlier ones, so this list reads
 # inside-out. The resulting order is:
