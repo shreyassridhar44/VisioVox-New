@@ -144,6 +144,51 @@
         "title": "JobStageResponse",
         "type": "object"
       },
+      "LimitsResponse": {
+        "description": "Live upload limits (docs/28 \u00a7D2).\n\nComputed per request rather than configured: these move with free space and\nwith other uploads in flight, and a cap that ignores the disk is a promise\nthe machine cannot keep.",
+        "properties": {
+          "available_bytes": {
+            "title": "Available Bytes",
+            "type": "integer"
+          },
+          "max_duration_seconds": {
+            "title": "Max Duration Seconds",
+            "type": "integer"
+          },
+          "max_speakers": {
+            "title": "Max Speakers",
+            "type": "integer"
+          },
+          "max_upload_bytes": {
+            "title": "Max Upload Bytes",
+            "type": "integer"
+          },
+          "quotas": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Quotas",
+            "type": "object"
+          },
+          "reserved_bytes": {
+            "title": "Reserved Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_upload_bytes",
+          "max_duration_seconds",
+          "max_speakers",
+          "available_bytes",
+          "reserved_bytes",
+          "quotas"
+        ],
+        "title": "LimitsResponse",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -417,6 +462,14 @@
             "title": "Key",
             "type": "string"
           },
+          "part_count": {
+            "title": "Part Count",
+            "type": "integer"
+          },
+          "part_size_bytes": {
+            "title": "Part Size Bytes",
+            "type": "integer"
+          },
           "parts": {
             "items": {
               "$ref": "#/components/schemas/UploadPart"
@@ -429,7 +482,7 @@
             "type": "string"
           }
         },
-        "required": ["upload_id", "key", "parts"],
+        "required": ["upload_id", "key", "part_size_bytes", "part_count", "parts"],
         "title": "UploadInitResponse",
         "type": "object"
       },
@@ -446,6 +499,102 @@
         },
         "required": ["part_number", "url"],
         "title": "UploadPart",
+        "type": "object"
+      },
+      "UploadPartsRequest": {
+        "additionalProperties": false,
+        "description": "Confirm finished parts and ask for the next batch of URLs.",
+        "properties": {
+          "after": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "After",
+            "type": "integer"
+          },
+          "completed": {
+            "items": {
+              "$ref": "#/components/schemas/CompletedPart"
+            },
+            "title": "Completed",
+            "type": "array"
+          }
+        },
+        "title": "UploadPartsRequest",
+        "type": "object"
+      },
+      "UploadPartsResponse": {
+        "properties": {
+          "completed_count": {
+            "title": "Completed Count",
+            "type": "integer"
+          },
+          "part_count": {
+            "title": "Part Count",
+            "type": "integer"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/UploadPart"
+            },
+            "title": "Parts",
+            "type": "array"
+          }
+        },
+        "required": ["parts", "completed_count", "part_count"],
+        "title": "UploadPartsResponse",
+        "type": "object"
+      },
+      "UploadStatusResponse": {
+        "description": "What a resuming client needs after a refresh.",
+        "properties": {
+          "completed_parts": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Completed Parts",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "part_count": {
+            "title": "Part Count",
+            "type": "integer"
+          },
+          "part_size_bytes": {
+            "title": "Part Size Bytes",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "upload_id": {
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "key",
+          "status",
+          "size_bytes",
+          "part_size_bytes",
+          "part_count",
+          "completed_parts",
+          "expires_at"
+        ],
+        "title": "UploadStatusResponse",
         "type": "object"
       },
       "UserResponse": {
@@ -898,6 +1047,56 @@
         "tags": ["auth"]
       }
     },
+    "/v1/limits": {
+      "get": {
+        "description": "What this account may upload right now, and why.\n\nThe upload screen shows these numbers before a file is chosen (docs/28 \u00a7D2).\nThey move with free space and with other uploads in flight, so they are\ncomputed per request rather than read from configuration.",
+        "operationId": "get_limits_v1_limits_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Get Limits",
+        "tags": ["limits"]
+      }
+    },
     "/v1/projects": {
       "get": {
         "operationId": "list_projects_v1_projects_get",
@@ -962,6 +1161,24 @@
       },
       "post": {
         "operationId": "create_project_v1_projects_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -977,7 +1194,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectResponse"
+                  "title": "Response Create Project V1 Projects Post"
                 }
               }
             },
@@ -1470,6 +1687,222 @@
           }
         },
         "summary": "Upload Init",
+        "tags": ["media"]
+      }
+    },
+    "/v1/projects/{project_id}/upload/{upload_id}": {
+      "get": {
+        "description": "What a resuming client needs: which parts are already in the store.\n\nThis is what makes a browser refresh cost nothing instead of restarting a\nmulti-gigabyte transfer.",
+        "operationId": "upload_status_v1_projects__project_id__upload__upload_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Upload Status",
+        "tags": ["media"]
+      }
+    },
+    "/v1/projects/{project_id}/upload/{upload_id}/abort": {
+      "post": {
+        "description": "Cancel and release the reservation.\n\nAborting at the object store matters as much as the row: incomplete\nmultipart uploads are billed storage that no bucket listing shows, which is\na cost leak that stays invisible until the bill arrives.",
+        "operationId": "upload_abort_v1_projects__project_id__upload__upload_id__abort_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Upload Abort",
+        "tags": ["media"]
+      }
+    },
+    "/v1/projects/{project_id}/upload/{upload_id}/parts": {
+      "post": {
+        "description": "Record confirmed parts and hand back the next batch of URLs.\n\nOne call does both so a client uploading a large file makes one round trip\nper batch rather than two, and so progress is durable at batch granularity\nrather than only at the end.",
+        "operationId": "upload_parts_v1_projects__project_id__upload__upload_id__parts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadPartsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPartsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Upload Parts",
         "tags": ["media"]
       }
     }

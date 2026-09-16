@@ -16,6 +16,7 @@ path that reads another user's object.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -83,8 +84,18 @@ class ObjectStore:
         project_id: str,
         filename: str,
         content_type: str,
-        part_count: int,
+        part_count: int = 0,
     ) -> MultipartUpload:
+        """Begin a multipart upload.
+
+        Part URLs are NOT presigned here. At 2 GB presigning everything up front
+        was merely wasteful; at 30 GB it is thousands of URLs in one response,
+        sharing one short expiry, most of them dead before the client reaches
+        them. Callers ask for a batch at a time via `presign_parts`.
+
+        `part_count` is retained so an existing small-file caller can still get
+        its URLs in one go.
+        """
         key = object_key(user_id, project_id, filename)
         async with self._session.client(**self._client_kwargs()) as s3:
             created = await s3.create_multipart_upload(
@@ -93,22 +104,40 @@ class ObjectStore:
                 ContentType=content_type,
             )
             upload_id = str(created["UploadId"])
-
-            parts: list[PresignedPart] = []
-            for n in range(1, part_count + 1):
-                url = await s3.generate_presigned_url(
-                    "upload_part",
-                    Params={
-                        "Bucket": self._settings.s3_bucket,
-                        "Key": key,
-                        "UploadId": upload_id,
-                        "PartNumber": n,
-                    },
-                    ExpiresIn=self._settings.signed_url_ttl_seconds,
-                )
-                parts.append(PresignedPart(part_number=n, url=url))
+            parts = await self._presign(s3, key, upload_id, range(1, part_count + 1))
 
         return MultipartUpload(upload_id=upload_id, key=key, parts=parts)
+
+    async def _presign(
+        self, s3: Any, key: str, upload_id: str, numbers: Iterable[int]
+    ) -> list[PresignedPart]:
+        parts: list[PresignedPart] = []
+        for n in numbers:
+            url = await s3.generate_presigned_url(
+                "upload_part",
+                Params={
+                    "Bucket": self._settings.s3_bucket,
+                    "Key": key,
+                    "UploadId": upload_id,
+                    "PartNumber": n,
+                },
+                ExpiresIn=self._settings.signed_url_ttl_seconds,
+            )
+            parts.append(PresignedPart(part_number=n, url=url))
+        return parts
+
+    async def presign_parts(
+        self, key: str, upload_id: str, numbers: Sequence[int]
+    ) -> list[PresignedPart]:
+        """Fresh URLs for a batch of part numbers.
+
+        Also the resume path: a client returning after its URLs expired asks
+        again for the parts it still needs, rather than restarting the upload.
+        """
+        if not numbers:
+            return []
+        async with self._session.client(**self._client_kwargs()) as s3:
+            return await self._presign(s3, key, upload_id, numbers)
 
     async def complete_multipart_upload(
         self, key: str, upload_id: str, parts: list[tuple[int, str]]

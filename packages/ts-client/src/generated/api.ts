@@ -126,6 +126,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Limits
+         * @description What this account may upload right now, and why.
+         *
+         *     The upload screen shows these numbers before a file is chosen (docs/28 §D2).
+         *     They move with free space and with other uploads in flight, so they are
+         *     computed per request rather than read from configuration.
+         */
+        get: operations["get_limits_v1_limits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -253,6 +277,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{project_id}/upload/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upload Status
+         * @description What a resuming client needs: which parts are already in the store.
+         *
+         *     This is what makes a browser refresh cost nothing instead of restarting a
+         *     multi-gigabyte transfer.
+         */
+        get: operations["upload_status_v1_projects__project_id__upload__upload_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/upload/{upload_id}/abort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Abort
+         * @description Cancel and release the reservation.
+         *
+         *     Aborting at the object store matters as much as the row: incomplete
+         *     multipart uploads are billed storage that no bucket listing shows, which is
+         *     a cost leak that stays invisible until the bill arrives.
+         */
+        post: operations["upload_abort_v1_projects__project_id__upload__upload_id__abort_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/upload/{upload_id}/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Parts
+         * @description Record confirmed parts and hand back the next batch of URLs.
+         *
+         *     One call does both so a client uploading a large file makes one round trip
+         *     per batch rather than two, and so progress is durable at batch granularity
+         *     rather than only at the end.
+         */
+        post: operations["upload_parts_v1_projects__project_id__upload__upload_id__parts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -313,6 +408,32 @@ export interface components {
             status: string;
             /** Warnings */
             warnings: string[];
+        };
+        /**
+         * LimitsResponse
+         * @description Live upload limits (docs/28 §D2).
+         *
+         *     Computed per request rather than configured: these move with free space and
+         *     with other uploads in flight, and a cap that ignores the disk is a promise
+         *     the machine cannot keep.
+         */
+        LimitsResponse: {
+            /** Available Bytes */
+            available_bytes: number;
+            /** Max Duration Seconds */
+            max_duration_seconds: number;
+            /** Max Speakers */
+            max_speakers: number;
+            /** Max Upload Bytes */
+            max_upload_bytes: number;
+            /** Quotas */
+            quotas: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Reserved Bytes */
+            reserved_bytes: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -424,6 +545,10 @@ export interface components {
         UploadInitResponse: {
             /** Key */
             key: string;
+            /** Part Count */
+            part_count: number;
+            /** Part Size Bytes */
+            part_size_bytes: number;
             /** Parts */
             parts: components["schemas"]["UploadPart"][];
             /** Upload Id */
@@ -435,6 +560,53 @@ export interface components {
             part_number: number;
             /** Url */
             url: string;
+        };
+        /**
+         * UploadPartsRequest
+         * @description Confirm finished parts and ask for the next batch of URLs.
+         */
+        UploadPartsRequest: {
+            /**
+             * After
+             * @default 0
+             */
+            after: number;
+            /** Completed */
+            completed?: components["schemas"]["CompletedPart"][];
+        };
+        /** UploadPartsResponse */
+        UploadPartsResponse: {
+            /** Completed Count */
+            completed_count: number;
+            /** Part Count */
+            part_count: number;
+            /** Parts */
+            parts: components["schemas"]["UploadPart"][];
+        };
+        /**
+         * UploadStatusResponse
+         * @description What a resuming client needs after a refresh.
+         */
+        UploadStatusResponse: {
+            /** Completed Parts */
+            completed_parts: number[];
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Key */
+            key: string;
+            /** Part Count */
+            part_count: number;
+            /** Part Size Bytes */
+            part_size_bytes: number;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Status */
+            status: string;
+            /** Upload Id */
+            upload_id: string;
         };
         /** UserResponse */
         UserResponse: {
@@ -814,6 +986,53 @@ export interface operations {
             };
         };
     };
+    get_limits_v1_limits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LimitsResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_projects_v1_projects_get: {
         parameters: {
             query?: {
@@ -866,7 +1085,9 @@ export interface operations {
     create_project_v1_projects_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -882,7 +1103,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Unauthorized */
@@ -1240,6 +1461,158 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadInitResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_status_v1_projects__project_id__upload__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadStatusResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_abort_v1_projects__project_id__upload__upload_id__abort_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_parts_v1_projects__project_id__upload__upload_id__parts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadPartsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPartsResponse"];
                 };
             };
             /** @description Unauthorized */

@@ -103,15 +103,66 @@ class UploadPart(BaseModel):
     url: str
 
 
-class UploadInitResponse(BaseModel):
-    upload_id: str
-    key: str
-    parts: list[UploadPart]
-
-
 class CompletedPart(StrictModel):
     part_number: int = Field(ge=1)
     etag: str = Field(min_length=1)
+
+
+class UploadInitResponse(BaseModel):
+    upload_id: str
+    key: str
+    # The client slices the file on this boundary; it is chosen by the server so
+    # very large files stay inside S3's 10,000-part ceiling.
+    part_size_bytes: int
+    part_count: int
+    # Only the first batch. More come from /upload/{id}/parts, because
+    # presigning thousands of URLs up front hands out mostly-expired links.
+    parts: list[UploadPart]
+
+
+class UploadPartsRequest(StrictModel):
+    """Confirm finished parts and ask for the next batch of URLs."""
+
+    completed: list[CompletedPart] = Field(default_factory=list)
+    # Where the client wants to resume from. The server takes the greater of
+    # this and what it has already recorded, so a confused client cannot skip
+    # parts by asking for a later batch.
+    after: int = Field(default=0, ge=0)
+
+
+class UploadPartsResponse(BaseModel):
+    parts: list[UploadPart]
+    completed_count: int
+    part_count: int
+
+
+class UploadStatusResponse(BaseModel):
+    """What a resuming client needs after a refresh."""
+
+    upload_id: str
+    key: str
+    status: str
+    size_bytes: int
+    part_size_bytes: int
+    part_count: int
+    completed_parts: list[int]
+    expires_at: dt.datetime
+
+
+class LimitsResponse(BaseModel):
+    """Live upload limits (docs/28 §D2).
+
+    Computed per request rather than configured: these move with free space and
+    with other uploads in flight, and a cap that ignores the disk is a promise
+    the machine cannot keep.
+    """
+
+    max_upload_bytes: int
+    max_duration_seconds: int
+    max_speakers: int
+    available_bytes: int
+    reserved_bytes: int
+    quotas: dict[str, dict[str, int]]
 
 
 class UploadCompleteRequest(StrictModel):
