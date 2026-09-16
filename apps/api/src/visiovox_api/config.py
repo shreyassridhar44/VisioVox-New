@@ -66,8 +66,27 @@ class Settings(BaseSettings):
     pipeline_mode: PipelineMode = "mock"
     extractor_version: str = "seave-0.1.0"
 
+    # --- media volume (docs/track-w/W0) ---
+    # Where uploads and derived artifacts live. This must be a dedicated
+    # filesystem: measuring "/" inside the WSL distro returns the vhdx's
+    # virtual maximum rather than real free space, which is how a disk check
+    # passes on a full drive.
+    media_root: str = "/srv/media"
+    # Held back from the usable figure. A job needs source, working copy and
+    # outputs on disk at once; running the volume to zero corrupts whatever is
+    # mid-write, not only the job that overshot.
+    disk_reserved_bytes: int = 20 * 1024**3
+    # Peak disk a job occupies relative to its source size. Provisional until
+    # measured in W2 — the working copy is small, the export is not.
+    upload_peak_multiplier: float = 2.5
+    # Off locally and in CI, which legitimately have no separate volume. On for
+    # the deployed workstation, which is the machine whose df lies.
+    require_dedicated_media_volume: bool = False
+
     # --- limits ---
-    max_upload_bytes: int = 2 * 1024 * 1024 * 1024
+    # A backstop against one absurd upload, not the limit shown to users: that
+    # is computed from live headroom (docs/28 D2).
+    max_upload_bytes: int = 50 * 1024**3
     max_duration_seconds: int = 3600
     max_speakers: int = Field(default=4, ge=1, le=8)
 
