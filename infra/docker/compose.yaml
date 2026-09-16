@@ -49,7 +49,11 @@ services:
       - '9000:9000' # S3 API
       - '9001:9001' # console
     volumes:
-      - minio-data:/data
+      # Unset, this is the named volume - which lives on the distro's own vhdx
+      # and is therefore bounded by free space on D:, not by the media volume.
+      # Set MEDIA_MINIO_PATH (e.g. /srv/media/minio) to bind-mount the dedicated
+      # volume instead. See docs/track-w/W0-storage-headroom.md.
+      - ${MEDIA_MINIO_PATH:-minio-data}:/data
     healthcheck:
       test: ['CMD', 'mc', 'ready', 'local']
       interval: 5s

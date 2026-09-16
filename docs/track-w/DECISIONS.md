@@ -80,7 +80,22 @@ Two are load-bearing for this track specifically:
 
 Decisions taken during implementation that Part 1 did not anticipate. Append; do not rewrite.
 
-### 2026-09-16 — W0
+### 2026-09-16 — W0 · storage route
+
+- **Media lives on a dedicated ext4 vhdx on `E:`, mounted at `/srv/media`.** Native ext4 on NVMe,
+  full speed. Costs a one-time elevated setup and a logon task, because `wsl --mount` needs
+  Administrator and does not survive a reboot.
+- **🚫 The datasets stay. Do not delete `~/data/Libri2Mix`, `~/data/Libri3Mix` or
+  `~/data/voxceleb2`.** More training is planned (the `c4` attempt of 2026-09-13 may be retried),
+  and VoxCeleb2 may be unrecoverable because its credentials are still outstanding. This removes
+  160 GB of easy reclaim from the table — deliberately. **Find space elsewhere; do not revisit
+  this.**
+- **`D:` is therefore rescued without deleting anything**, via `fstrim` plus
+  `wsl --manage VisioVox --set-sparse true`. The vhdx file is 360.6 GB while the filesystem holds
+  281 GB, so roughly 80 GB is dead slack that a dynamic vhdx never returns on its own. This needs
+  the distro stopped, so it is scheduled rather than done opportunistically.
+
+### 2026-09-16 — W0 · implementation
 - **The headroom check measures the configured media path, not `/`.** `statvfs("/")` reports the
   vhdx's virtual ceiling here and is useless. The check resolves the configured media directory and
   **refuses to run if that directory shares a filesystem with `/`**, because that silently

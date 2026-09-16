@@ -139,10 +139,19 @@ available at all** — it is genuinely workable, just slower.
 - [x] Audit real free space on host drives, not `df` inside the distro
 - [x] Identify what is consuming `D:` and the distro vhdx
 - [x] Establish which operations are available without elevation
-- [ ] **DECIDE: route A+D, A+C, or something else** ← blocking
-- [ ] Create the media volume and mount it at `/srv/media`
-- [ ] Point the MinIO Compose volume at `/srv/media` (currently a named Docker volume on the `D:` vhdx)
-- [ ] Persist the mount across reboots
+- [x] **DECIDE the route** — dedicated ext4 vhdx on `E:`, mounted at `/srv/media`.
+      **Datasets are kept**, so the 160 GB reclaim is off the table; `D:` gets rescued by sparse
+      reclaim instead (see DECISIONS.md)
+- [x] Write the setup scripts — `infra/local/create-media-volume.ps1` (elevated),
+      `infra/local/setup-media-volume.sh` (idempotent, verifies the mount is a distinct filesystem)
+- [x] Make MinIO's storage location configurable — `MEDIA_MINIO_PATH` in `infra/docker/compose.yaml`,
+      defaulting to the existing named volume so nothing breaks until the volume exists
+- [x] Document the new settings in `.env.example`
+- [ ] ⏳ **Run `create-media-volume.ps1` elevated** ← needs the project owner; cannot be done from here
+- [ ] Run `setup-media-volume.sh` and confirm `/srv/media` is a distinct filesystem
+- [ ] Set `MEDIA_MINIO_PATH` and restart the stack; migrate any existing bucket contents
+- [ ] Register the logon task so the mount survives a reboot
+- [ ] Reclaim `D:` slack: `fstrim -av`, then `wsl --manage VisioVox --set-sparse true` (needs the distro stopped)
 - [x] Disk-headroom check that reads the **media volume**, never `df /` — `apps/api/src/visiovox_api/diskspace.py`
 - [x] Admission cut-out below a configured headroom floor — `can_admit()` in the same module
 - [x] Regression test so the wrong disk check cannot come back — `tests/test_diskspace.py`, 13 tests
@@ -195,3 +204,14 @@ The code half of W0 is done and does not depend on the route decision — it mea
   the media volume silently vanishes and MinIO starts writing to an empty directory.
 - **Docker named volumes live on the distro vhdx.** Moving MinIO's storage means changing the
   Compose volume to a bind mount; simply mounting `/srv/media` is not enough.
+- **⚠️ Setting `MEDIA_MINIO_PATH` before the volume is mounted is silently wrong.** Docker creates
+  a missing bind-mount source as an ordinary directory — so MinIO starts, works, and writes to the
+  **root vhdx** while every sign says it is on the media volume. Mount first, then set the variable.
+  The API-side guard (`require_dedicated_media_volume`) catches this; Docker will not.
+- **Device letters move.** The attached vhdx can appear as `/dev/sdc` or `/dev/sdd` depending on
+  attach order, which is why `setup-media-volume.sh` writes fstab by **UUID**. `nofail` is equally
+  load-bearing: without it, a boot where the vhdx was not attached drops the distro into an
+  emergency shell rather than starting without the volume.
+- **`mkfs.ext4 -m 0` is deliberate.** The default 5% root reserve would be ~12 GB of unusable space
+  on a 250 GB media volume. Headroom is managed explicitly by `disk_reserved_bytes`, where it is
+  visible and tunable, rather than hidden in the filesystem.

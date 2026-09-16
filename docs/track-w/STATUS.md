@@ -26,18 +26,27 @@
 
 ---
 
-## 🔴 Blocked on
+## 🔴 Blocked on — one elevated command
 
-**W0 needs a decision about where the media volume lives.** Three viable routes, all costed in
-[`W0-storage-headroom.md`](./W0-storage-headroom.md) §Options. The blocker is not technical
-difficulty — it is that every route either deletes datasets, moves the distro, or needs an
-elevated shell, and none of those is a decision to take unilaterally.
+Everything that can be done without Administrator is done. To finish W0, run this **in an elevated
+PowerShell** (Start → Windows Terminal → *Run as administrator*):
 
-Two hard constraints discovered on 2026-09-16:
+```powershell
+cd \\wsl.localhost\VisioVox\home\dmin\visiovox\VisioVox-New\infra\local
+.\create-media-volume.ps1 -RegisterLogonTask
+```
 
-- **The working shell is not elevated**, so `wsl --mount --vhd` and `diskpart` are unavailable —
-  they require Administrator.
-- **The Hyper-V PowerShell module is absent**, so `New-VHD` and `Optimize-VHD` do not exist.
+It creates a 250 GB expandable ext4 vhdx at `E:\wsl\media.vhdx`, attaches it to the WSL2 VM, and
+registers a logon task so the attach survives a reboot. It refuses to overwrite an existing vhdx
+and is safe to re-run.
+
+Then the rest can be finished from a normal shell.
+
+**Why it needs elevation:** `wsl --mount` and `diskpart` both require Administrator, and the
+Hyper-V PowerShell module is absent on this machine so `New-VHD` is not an option.
+
+**Route decided:** dedicated vhdx on `E:`. **The datasets are kept** — no deleting
+`Libri2Mix`, `Libri3Mix` or `voxceleb2`, so `D:` gets rescued by sparse reclaim instead.
 
 ---
 
