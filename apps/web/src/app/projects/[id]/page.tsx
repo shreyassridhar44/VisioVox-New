@@ -3,7 +3,8 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { JobResponse, ProjectResponse } from '@visiovox/ts-client';
-import { api } from '@/lib/store';
+import { accessToken, api } from '@/lib/store';
+import { ProcessingView } from '@/components/ProcessingView';
 import { Player } from '@/components/Player';
 import type { Manifest } from '@/lib/playback/manifest';
 
@@ -46,11 +47,11 @@ export default function ProjectPage() {
         setJob(j);
         setProgress({ status: j.status, progress: j.progress, stage: null });
 
-        // Poll rather than SSE here: EventSource cannot attach an
-        // Authorization header, and proxying the stream is Phase 6 work.
-        // The mock finishes in seconds, so a 1 s tick is not a real cost yet.
+        // A slow safety net only. Live progress arrives over SSE in
+        // ProcessingView; this exists so the page still converges if the
+        // stream is blocked by a proxy that buffers text/event-stream.
         if (!TERMINAL.has(j.status)) {
-          setTimeout(() => void poll(), 1000);
+          setTimeout(() => void poll(), 10000);
         }
       } catch (err) {
         if (!stopped()) setError(err instanceof Error ? err.message : 'Failed to load');
@@ -116,6 +117,15 @@ export default function ProjectPage() {
           </ul>
         )}
       </div>
+
+      {progress !== null && !TERMINAL.has(progress.status) && (
+        <ProcessingView
+          projectId={projectId}
+          projectTitle={project.title}
+          token={accessToken()}
+          speakerCount={project.speaker_count}
+        />
+      )}
 
       {manifest !== null && <Player manifest={manifest} />}
 

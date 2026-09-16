@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Path, Request, status
+from fastapi import Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,3 +87,76 @@ async def owned_project(
 
 
 OwnedProject = Annotated[Project, Depends(owned_project)]
+
+
+# --------------------------------------------------------------------------
+# SSE authentication
+# --------------------------------------------------------------------------
+#
+# `EventSource` cannot set an Authorization header - the API simply does not
+# exist in the browser - so the progress stream accepts the access token as a
+# query parameter instead.
+#
+# The trade is real and worth naming: URLs reach access logs, proxy logs and
+# `Referer` headers in a way that headers do not. It is acceptable here only
+# because of what the token is: an access token with a 10-minute TTL, useless
+# once expired, and revocable immediately by killing the session. A refresh
+# token must NEVER travel this way.
+#
+# The mitigations are load-bearing, not decorative: the access log must not
+# record query strings for this path, and the window must stay short.
+
+
+async def current_user_sse(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    access_token: Annotated[str | None, Query()] = None,
+) -> User:
+    """Authenticate a stream, from the header if present, else the query."""
+    header = request.headers.get("authorization", "")
+    scheme, _, header_token = header.partition(" ")
+    token = header_token if scheme.lower() == "bearer" and header_token else access_token
+
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing access token")
+
+    try:
+        claims = decode_access_token(token, settings.auth_secret.get_secret_value())
+    except InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token"
+        ) from exc
+
+    auth_session = await session.get(AuthSession, claims.session_id)
+    if auth_session is None or auth_session.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session revoked")
+
+    user = await session.get(User, claims.user_id)
+    if user is None or user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account unavailable")
+    return user
+
+
+CurrentUserSSE = Annotated[User, Depends(current_user_sse)]
+
+
+async def owned_project_sse(
+    project_id: Annotated[str, Path(pattern=r"^prj_[0-9A-HJKMNP-TV-Z]{26}$")],
+    user: CurrentUserSSE,
+    session: SessionDep,
+) -> Project:
+    """Ownership check for the stream (invariant 4), 404 for the same reason."""
+    project = await session.scalar(
+        select(Project).where(
+            Project.id == project_id,
+            Project.user_id == user.id,
+            Project.deleted_at.is_(None),
+        )
+    )
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
+    return project
+
+
+OwnedProjectSSE = Annotated[Project, Depends(owned_project_sse)]

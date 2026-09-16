@@ -33,7 +33,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from . import audit, problems, quotas, uploads
 from .config import get_settings
-from .deps import CurrentUser, OwnedProject, SessionDep, SettingsDep
+from .deps import CurrentUser, OwnedProject, OwnedProjectSSE, SessionDep, SettingsDep
 from .models import Job, UploadSession
 from .ratelimit import RULES, RateLimiter, client_ip, enforce
 from .redis_client import get_redis
@@ -408,7 +408,7 @@ async def get_manifest(project: OwnedProject) -> dict[str, Any]:
 
 @router.get("/{project_id}/events")
 async def job_events(
-    project: OwnedProject, session: SessionDep, request: Request
+    project: OwnedProjectSSE, session: SessionDep, request: Request
 ) -> EventSourceResponse:
     """Server-sent progress for the processing view."""
     job = await session.scalar(select(Job).where(Job.project_id == project.id))

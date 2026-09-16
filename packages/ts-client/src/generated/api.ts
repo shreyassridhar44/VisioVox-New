@@ -1237,7 +1237,9 @@ export interface operations {
     };
     job_events_v1_projects__project_id__events_get: {
         parameters: {
-            query?: never;
+            query?: {
+                access_token?: string | null;
+            };
             header?: never;
             path: {
                 project_id: string;

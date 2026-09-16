@@ -1373,6 +1373,22 @@
               "title": "Project Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
           }
         ],
         "responses": {

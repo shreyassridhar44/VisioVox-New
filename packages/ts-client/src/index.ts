@@ -22,6 +22,10 @@ export type ProjectResponse = Schemas['ProjectResponse'];
 export type ProjectListResponse = Schemas['ProjectListResponse'];
 export type JobResponse = Schemas['JobResponse'];
 export type UploadInitResponse = Schemas['UploadInitResponse'];
+export type UploadPartsResponse = Schemas['UploadPartsResponse'];
+export type UploadStatusResponse = Schemas['UploadStatusResponse'];
+export type LimitsResponse = Schemas['LimitsResponse'];
+export type CompletedPart = Schemas['CompletedPart'];
 
 export const CLIENT_VERSION = '0.1.0' as const;
 
@@ -214,10 +218,14 @@ export class VisioVoxClient {
 
   // ---- upload ----
 
+  /**
+   * Begin an upload. The server chooses the part size and count, because that
+   * arithmetic has to satisfy the object store's limits and the client has no
+   * reason to know them.
+   */
   uploadInit(
     projectId: string,
     file: { name: string; type: string; size: number },
-    partCount = 1,
   ): Promise<UploadInitResponse> {
     return this.request<UploadInitResponse>(`/v1/projects/${projectId}/upload/init`, {
       method: 'POST',
@@ -225,7 +233,6 @@ export class VisioVoxClient {
         filename: file.name,
         content_type: file.type || 'application/octet-stream',
         size_bytes: file.size,
-        part_count: partCount,
       }),
     });
   }
@@ -247,6 +254,47 @@ export class VisioVoxClient {
    * the caller passes the access token as a query parameter or proxies the
    * stream server-side; the Next.js app does the latter.
    */
+  /**
+   * What this account may upload right now.
+   *
+   * Computed server-side from live free space and uploads already in flight, so
+   * it is fetched rather than cached: a limit shown from five minutes ago can be
+   * wrong by the size of somebody else's upload.
+   */
+  getLimits(): Promise<LimitsResponse> {
+    return this.request<LimitsResponse>('/v1/limits');
+  }
+
+  /**
+   * Confirm finished parts and collect the next batch of URLs.
+   *
+   * One call rather than two, so a large upload costs one round trip per batch
+   * and its progress becomes durable at batch granularity.
+   */
+  uploadParts(
+    projectId: string,
+    uploadId: string,
+    completed: CompletedPart[],
+    after = 0,
+  ): Promise<UploadPartsResponse> {
+    return this.request<UploadPartsResponse>(`/v1/projects/${projectId}/upload/${uploadId}/parts`, {
+      method: 'POST',
+      body: JSON.stringify({ completed, after }),
+    });
+  }
+
+  /** Which parts the server already holds — the basis for resuming. */
+  uploadStatus(projectId: string, uploadId: string): Promise<UploadStatusResponse> {
+    return this.request<UploadStatusResponse>(`/v1/projects/${projectId}/upload/${uploadId}`);
+  }
+
+  /** Cancel, releasing both the reservation and the multipart upload. */
+  uploadAbort(projectId: string, uploadId: string): Promise<void> {
+    return this.requestNoContent(`/v1/projects/${projectId}/upload/${uploadId}/abort`, {
+      method: 'POST',
+    });
+  }
+
   eventsUrl(projectId: string): string {
     return `${this.baseUrl}/v1/projects/${projectId}/events`;
   }

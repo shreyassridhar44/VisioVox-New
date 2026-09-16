@@ -39,6 +39,18 @@ function saveTokens(tokens: Tokens | null): void {
 
 let clientSingleton: VisioVoxClient | null = null;
 
+/**
+ * The current access token, for the one caller that cannot use a header.
+ *
+ * `EventSource` has no way to set Authorization, so the progress stream takes
+ * the token on the query string instead. Access tokens only: they expire in ten
+ * minutes and are revocable, which is what makes that acceptable. A refresh
+ * token must never leave through this door.
+ */
+export function accessToken(): string | null {
+  return loadTokens()?.accessToken ?? null;
+}
+
 export function api(): VisioVoxClient {
   clientSingleton ??= new VisioVoxClient({
     baseUrl: API_BASE,

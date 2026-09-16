@@ -15,7 +15,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <a href="/" className="brand">
             VisioVox
           </a>
-          <nav>
+          <nav className="flex gap-4 text-sm">
+            <a href="/upload">Upload</a>
             <a href="/projects">Projects</a>
           </nav>
         </header>
