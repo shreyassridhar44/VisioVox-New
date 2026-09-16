@@ -24,7 +24,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from visiovox_api.config import get_settings
-from visiovox_api.models import Job, Project, UsageCounter, new_id
+from visiovox_api.models import Export, Job, Project, UsageCounter, new_id
 
 from .real_pipeline import PipelineError, run_pipeline
 from .stagerunner import StageRunner, publish
@@ -255,3 +255,117 @@ def queue_depth() -> int:
         return depth if isinstance(depth, int) else 0
     except Exception:
         return 0
+
+
+# --------------------------------------------------------------------------
+# exports (docs/28 §W6)
+# --------------------------------------------------------------------------
+
+
+def _speaker_audio_path(project: Project, ordinal: int | None) -> Path:
+    """Where the packager left this speaker's isolated track.
+
+    The FAITHFUL track, deliberately (invariant 6): an export is what someone
+    keeps and quotes, so it must be what was recovered rather than what a
+    restoration model found plausible.
+    """
+    base = Path(settings.media_root) / "projects" / project.id
+    if ordinal is None:
+        return base / "mixed.m4a"
+    return base / f"spk_{ordinal}_f.m4a"
+
+
+@celery_app.task(name="visiovox.render_export", bind=True, max_retries=1)
+def render_export(self: Any, export_id: str) -> dict[str, Any]:
+    """Render one export and publish it for download."""
+    from pipeline import s10_render
+
+    with _Session() as session:
+        row = session.get(Export, export_id)
+        if row is None:
+            return {"status": "missing", "export_id": export_id}
+
+        project = session.get(Project, row.project_id)
+        if project is None:
+            return {"status": "missing_project", "export_id": export_id}
+
+        row.status = "running"
+        session.commit()
+
+        work = Path(settings.media_work_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        out_dir = Path(settings.media_root) / "exports" / project.id
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        audio = _speaker_audio_path(project, row.speaker_ordinal)
+        if not audio.is_file():
+            row.status = "failed"
+            row.error_detail = "the isolated track for this speaker is no longer available"
+            row.finished_at = _now()
+            session.commit()
+            return {"status": "failed", "export_id": export_id, "reason": "audio_missing"}
+
+        suffix = "m4a" if row.kind == "audio" else "mp4"
+        name = f"{row.speaker_ordinal or 'all'}-{row.quality or row.kind}.{suffix}"
+        destination = out_dir / name
+
+        try:
+            if row.kind == "audio":
+                s10_render.render_audio(audio=audio, out=destination)
+            else:
+                source_video = Path(settings.media_root) / "projects" / project.id / "source.mp4"
+                if not source_video.is_file():
+                    # No video to mux onto: give them the audio rather than
+                    # failing, and say so. Invariant 8 in miniature.
+                    s10_render.render_audio(audio=audio, out=destination.with_suffix(".m4a"))
+                    destination = destination.with_suffix(".m4a")
+                    row.kind = "audio"
+                else:
+                    # Resolved against what this source actually offers rather
+                    # than the fixed ladder: a sub-480p source is offered a rung
+                    # named for its own height, which is not in LADDER, and
+                    # looking it up there would silently yield None.
+                    rendition = next(
+                        (
+                            r
+                            for r in s10_render.available_renditions(project.height)
+                            if r.name == row.quality
+                        ),
+                        None,
+                    )
+                    s10_render.render_mp4(
+                        video=source_video,
+                        audio=audio,
+                        out=destination,
+                        rendition=rendition,
+                        source_height=project.height,
+                    )
+        except s10_render.RenderError as exc:
+            row.status = "failed"
+            row.error_detail = str(exc)[:500]
+            row.finished_at = _now()
+            session.commit()
+            return {"status": "failed", "export_id": export_id, "reason": str(exc)}
+
+        row.storage_key = str(destination.relative_to(Path(settings.media_root)))
+        row.size_bytes = destination.stat().st_size
+        row.status = "ready"
+        row.finished_at = _now()
+        session.commit()
+
+        return {
+            "status": "ready",
+            "export_id": export_id,
+            "bytes": row.size_bytes,
+        }
+
+
+def enqueue_export(export_id: str) -> None:
+    """Renders share the GPU queue.
+
+    Not because a render needs the GPU - it does not - but because it competes
+    for the same disk and the same ffmpeg, and a render running beside an
+    extraction is exactly the contention the single-concurrency queue exists to
+    prevent.
+    """
+    render_export.apply_async(args=[export_id], queue="gpu")

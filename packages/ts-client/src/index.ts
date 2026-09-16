@@ -25,6 +25,10 @@ export type UploadInitResponse = Schemas['UploadInitResponse'];
 export type UploadPartsResponse = Schemas['UploadPartsResponse'];
 export type UploadStatusResponse = Schemas['UploadStatusResponse'];
 export type LimitsResponse = Schemas['LimitsResponse'];
+export type ExportResponse = Schemas['ExportResponse'];
+export type ExportListResponse = Schemas['ExportListResponse'];
+export type RenditionOption = Schemas['RenditionOption'];
+export type CreateExportRequest = Schemas['CreateExportRequest'];
 export type CompletedPart = Schemas['CompletedPart'];
 
 export const CLIENT_VERSION = '0.1.0' as const;
@@ -293,6 +297,33 @@ export class VisioVoxClient {
     return this.requestNoContent(`/v1/projects/${projectId}/upload/${uploadId}/abort`, {
       method: 'POST',
     });
+  }
+
+  /** What this recording can honestly produce, from its real height. */
+  exportOptions(projectId: string): Promise<RenditionOption[]> {
+    return this.request<RenditionOption[]>(`/v1/projects/${projectId}/export-options`);
+  }
+
+  createExport(projectId: string, body: CreateExportRequest): Promise<ExportResponse> {
+    return this.request<ExportResponse>(`/v1/projects/${projectId}/exports`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  listExports(projectId: string): Promise<ExportListResponse> {
+    return this.request<ExportListResponse>(`/v1/projects/${projectId}/exports`);
+  }
+
+  /**
+   * The download URL.
+   *
+   * Returned rather than fetched: this is put in an href so the browser drives
+   * the transfer, which is what makes Range and resume work. Pulling it through
+   * fetch would buffer a multi-gigabyte file in memory first.
+   */
+  exportDownloadUrl(projectId: string, exportId: string): string {
+    return `${this.baseUrl}/v1/projects/${projectId}/exports/${exportId}/download`;
   }
 
   eventsUrl(projectId: string): string {

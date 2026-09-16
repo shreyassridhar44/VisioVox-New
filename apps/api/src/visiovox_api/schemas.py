@@ -149,6 +149,40 @@ class UploadStatusResponse(BaseModel):
     expires_at: dt.datetime
 
 
+class CreateExportRequest(StrictModel):
+    """Ask for one rendered file."""
+
+    kind: Literal["video", "audio"] = "video"
+    # None means every speaker, for an audio-stems export.
+    speaker_ordinal: int | None = Field(default=None, ge=1, le=8)
+    # Checked against what the source can honestly produce, never trusted.
+    quality: str | None = None
+
+
+class ExportResponse(BaseModel):
+    id: str
+    project_id: str
+    speaker_ordinal: int | None
+    kind: str
+    quality: str | None
+    status: str
+    size_bytes: int | None
+    expires_at: dt.datetime | None
+    created_at: dt.datetime
+
+
+class ExportListResponse(BaseModel):
+    items: list[ExportResponse]
+
+
+class RenditionOption(BaseModel):
+    """A rung this specific recording can serve."""
+
+    name: str
+    height: int | None
+    kind: str
+
+
 class LimitsResponse(BaseModel):
     """Live upload limits (docs/28 §D2).
 

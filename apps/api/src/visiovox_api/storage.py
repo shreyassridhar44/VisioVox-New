@@ -165,11 +165,22 @@ class ObjectStore:
                 Bucket=self._settings.s3_bucket, Key=key, UploadId=upload_id
             )
 
-    async def presign_get(self, key: str) -> str:
+    async def presign_get(self, key: str, download_as: str | None = None) -> str:
+        """A short-lived read URL.
+
+        `download_as` sets Content-Disposition on the response, so the browser
+        saves a file with a meaningful name instead of the storage key. Applied
+        through the signed parameters rather than a header, because the client
+        follows a redirect and cannot add one.
+        """
+        params: dict[str, Any] = {"Bucket": self._settings.s3_bucket, "Key": key}
+        if download_as:
+            safe = safe_filename(download_as)
+            params["ResponseContentDisposition"] = f'attachment; filename="{safe}"'
         async with self._session.client(**self._client_kwargs()) as s3:
             url = await s3.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": self._settings.s3_bucket, "Key": key},
+                Params=params,
                 ExpiresIn=self._settings.signed_url_ttl_seconds,
             )
         return str(url)

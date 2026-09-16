@@ -372,3 +372,59 @@ class UploadSession(Base):
             name="upload_sessions_status_check",
         ),
     )
+
+
+class Export(Base):
+    """A rendered file a user asked for (docs/28 §W6).
+
+    A row rather than a file on disk because an export has a lifecycle that
+    outlives the request that made it: it is produced asynchronously, it can
+    fail, it is downloaded later, and it expires. Storage grows without bound
+    otherwise — an export is typically larger than the source it came from.
+
+    Unique on (project, speaker, format, quality) so asking twice returns the
+    same artifact instead of re-encoding it. Re-encoding the same video to the
+    same rung twice is pure waste on a single-GPU machine.
+    """
+
+    __tablename__ = "exports"
+
+    id: Mapped[str] = _pk("exp")
+    project_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # None means "all speakers", for the audio-stems variant.
+    speaker_ordinal: Mapped[int | None] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(Text, nullable=False, server_default="video")
+    quality: Mapped[str | None] = mapped_column(Text)
+
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="queued")
+    storage_key: Mapped[str | None] = mapped_column(Text)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    error_detail: Mapped[str | None] = mapped_column(Text)
+
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = _now_col()
+    finished_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index(
+            "uq_export_project_variant",
+            "project_id",
+            "speaker_ordinal",
+            "kind",
+            "quality",
+            unique=True,
+        ),
+        Index("ix_exports_user_created", "user_id", "created_at"),
+        CheckConstraint(
+            _in_list("kind", ("video", "audio", "captions")), name="exports_kind_check"
+        ),
+        CheckConstraint(
+            _in_list("status", ("queued", "running", "ready", "failed", "expired")),
+            name="exports_status_check",
+        ),
+    )
