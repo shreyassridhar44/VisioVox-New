@@ -3,8 +3,8 @@
 > **Update this at the end of every working session.** It is the resume pointer.
 
 - **Last updated:** 2026-09-16
-- **Current phase:** **W0 — Storage headroom**
-- **State:** 🟡 Code done and verified; volume work blocked on a decision from the project owner
+- **Current phase:** **W1 — Foundation: limits, quotas, headers, idempotency**
+- **State:** 🟢 W0 done — media volume live at `/srv/media`, 175.8 GB usable
 - **Branch:** `feat/phase6-playback-engine` (Track W work should get its own branch)
 
 ---
@@ -13,9 +13,9 @@
 
 | Phase | State |
 |---|---|
-| **W0 — Storage headroom** | 🟡 **Partly done.** Disk check, admission cut-out, config and 13 regression tests landed and verified. Creating the volume is blocked (see below) |
-| W1 — Limits, quotas, headers | ⬜ Not started |
-| W2 — Large upload | ⬜ Not started — depends on W0 |
+| **W0 — Storage headroom** | ✅ **Done.** 200 GB ext4 volume at `/srv/media`, MinIO migrated onto it, disk guard live. `D:` slack reclaim deferred |
+| **W1 — Limits, quotas, headers** | 🟡 **Next up** |
+| W2 — Large upload | ⬜ Not started — W0 dependency now cleared |
 | W3 — Design system | ⬜ Not started |
 | W4 — Auth UI | ⬜ Not started |
 | W5 — Upload UI + engaged wait | ⬜ Not started |
@@ -26,27 +26,16 @@
 
 ---
 
-## 🔴 Blocked on — one elevated command
+## 🟢 Not blocked
 
-Everything that can be done without Administrator is done. To finish W0, run this **in an elevated
-PowerShell** (Start → Windows Terminal → *Run as administrator*):
+W0 needed no Administrator in the end. The elevated vhdx route was prepared but proved unnecessary
+once the loop-image route measured at 1.4 GB/s write / 5.2 GB/s read — the 9p boundary costs far
+less than expected for large sequential objects. `infra/local/create-media-volume.ps1` is kept for
+whenever the native-vhdx upgrade is wanted; nothing depends on it.
 
-```powershell
-cd \\wsl.localhost\VisioVox\home\dmin\visiovox\VisioVox-New\infra\local
-.\create-media-volume.ps1 -RegisterLogonTask
-```
-
-It creates a 250 GB expandable ext4 vhdx at `E:\wsl\media.vhdx`, attaches it to the WSL2 VM, and
-registers a logon task so the attach survives a reboot. It refuses to overwrite an existing vhdx
-and is safe to re-run.
-
-Then the rest can be finished from a normal shell.
-
-**Why it needs elevation:** `wsl --mount` and `diskpart` both require Administrator, and the
-Hyper-V PowerShell module is absent on this machine so `New-VHD` is not an option.
-
-**Route decided:** dedicated vhdx on `E:`. **The datasets are kept** — no deleting
-`Libri2Mix`, `Libri3Mix` or `voxceleb2`, so `D:` gets rescued by sparse reclaim instead.
+**One deferred item:** `D:` is still at 5.6 GB free. Roughly 80 GB of dead slack sits in the distro
+vhdx (360 GB file, 283 GB of data). Reclaiming it needs the distro stopped, so it is scheduled
+rather than done opportunistically. **The datasets are not to be deleted** — see DECISIONS.md.
 
 ---
 

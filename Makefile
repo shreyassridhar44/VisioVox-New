@@ -1,5 +1,10 @@
 # VisioVox — entry points. See docs/23-runbook.md.
-COMPOSE := docker compose -f infra/docker/compose.yaml
+# --project-directory . so the repo-root .env is the one Compose reads; without
+# it the project directory is infra/docker/ and .env is silently ignored, which
+# leaves MEDIA_MINIO_PATH unset and MinIO writing to the distro vhdx.
+# The project name is pinned by `name:` in the compose file, so this does not
+# rename the project or orphan its volumes.
+COMPOSE := docker compose -f infra/docker/compose.yaml --project-directory .
 UV      := uv
 PNPM    := pnpm
 

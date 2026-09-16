@@ -1,6 +1,6 @@
 # W0 — Storage headroom
 
-**State:** 🟡 In progress — audited, blocked on a route decision
+**State:** ✅ Volume built and verified. One deferred item: reclaiming `D:` slack.
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W0
 
 ---
@@ -60,6 +60,28 @@ The vhdx is **not** a VisioVox-only cost — but it is 72% of the drive.
 **vhdx slack:** the file is 360.6 G but the filesystem holds 281 G — roughly **80 G already
 reclaimable** without deleting anything, because a dynamic vhdx never shrinks on its own.
 
+### The volume as built — 2026-09-16
+
+| | |
+|---|---|
+| Backing file | `/mnt/e/wsl/visiovox-media.img`, 200 G, ext4, **not sparse** — NTFS commits the space immediately |
+| Mount | `/srv/media`, via `srv-media.mount` (systemd-fstab-generator) |
+| Capacity | 195.8 G total, **175.8 G usable** after the 20 G reserved floor |
+| `st_dev` | media `1793`, root `2096` — distinct, so the guard reads real numbers |
+| Max single upload | **50 G** — capped by the ceiling, not the disk (175.8 / 2.5 = 70 G available) |
+| `E:` after | 133 G free |
+
+**Throughput, measured with `dd conv=fdatasync` and caches dropped:**
+
+| | |
+|---|---|
+| Write | **1.4 GB/s** |
+| Read | **5.2 GB/s** |
+
+This is the number that settled the route. The 9p boundary was expected to be the objection to the
+loop-image approach; for the large sequential objects MinIO deals in it costs far less than feared,
+and the elevated vhdx setup was not worth requiring.
+
 ### Environment constraints — 2026-09-16
 
 | Fact | Consequence |
@@ -71,10 +93,10 @@ reclaimable** without deleting anything, because a dynamic vhdx never shrinks on
 
 ---
 
-## Options
+## Options considered
 
-Every route either deletes data, moves the distro, or needs one elevated shell. None is a
-unilateral call.
+Kept as the record of why the built volume looks the way it does. **Option C was taken** — see
+§"The volume as built". Options A, B and D were not.
 
 ### Option A — Reclaim inside the distro *(no admin; do this regardless)*
 Delete datasets that training no longer needs, then let the vhdx give space back:
@@ -98,7 +120,7 @@ wsl --manage VisioVox --move E:\wsl\VisioVox
 - Would only work after Option A shrinks it, and then `E:` is nearly full too — so it solves the
   `D:` problem and leaves no room for media. **Not recommended alone.**
 
-### Option C — Loop-mounted ext4 image on `E:` *(no admin, reversible)* ⭐ fallback
+### Option C — Loop-mounted ext4 image on `E:` *(no admin, reversible)* ✅ **CHOSEN**
 Create a large sparse file on `E:` through drvfs, format it ext4, mount it at `/srv/media`:
 ```bash
 sudo mkdir -p /srv/media
@@ -111,8 +133,10 @@ sudo mount -o loop /mnt/e/wsl/media.img /srv/media
 - **Cons:** I/O crosses the 9p boundary. Fine for MinIO's large sequential objects, poor for many
   small files. Needs a boot-time remount hook
 - **Gives:** ~250 G for media
+- **Measured after building it:** 1.4 GB/s write, 5.2 GB/s read — the 9p objection largely did not
+  materialise, which is why this beat Option D in practice
 
-### Option D — Proper vhdx on `E:` *(needs two elevated commands)* ⭐ recommended
+### Option D — Proper vhdx on `E:` *(needs two elevated commands)* — prepared, not used
 ```powershell
 # elevated PowerShell, once
 diskpart /s create-media-vhd.txt      # create vdisk file=E:\wsl\media.vhdx maximum=256000 type=expandable
@@ -127,10 +151,14 @@ sudo mkfs.ext4 /dev/sdX && sudo mkdir -p /srv/media && sudo mount /dev/sdX /srv/
   scheduled task at logon (also a one-time elevated setup)
 - **Gives:** ~250 G for media at full disk speed
 
-### Recommendation
-**Option A + Option D.** A because `D:` at 5.6 G free endangers the whole machine; D because media
-belongs on fast native ext4 and the elevation is a one-time cost. **Option C if elevation is not
-available at all** — it is genuinely workable, just slower.
+### Outcome
+**Option C**, on measurement rather than preference. The case for D was that native ext4 would be
+meaningfully faster; at 1.4 GB/s write the loop image is not the bottleneck for anything this
+product does, and C needs no Administrator, no logon task, and is reversible by deleting one file.
+`infra/local/create-media-volume.ps1` is kept so the D upgrade stays available; nothing depends on it.
+
+**Option A was rejected by the project owner** — the datasets stay (see DECISIONS.md). `D:` is
+therefore still at 5.6 G free and needs the sparse reclaim, which is deferred.
 
 ---
 
@@ -147,11 +175,19 @@ available at all** — it is genuinely workable, just slower.
 - [x] Make MinIO's storage location configurable — `MEDIA_MINIO_PATH` in `infra/docker/compose.yaml`,
       defaulting to the existing named volume so nothing breaks until the volume exists
 - [x] Document the new settings in `.env.example`
-- [ ] ⏳ **Run `create-media-volume.ps1` elevated** ← needs the project owner; cannot be done from here
-- [ ] Run `setup-media-volume.sh` and confirm `/srv/media` is a distinct filesystem
-- [ ] Set `MEDIA_MINIO_PATH` and restart the stack; migrate any existing bucket contents
-- [ ] Register the logon task so the mount survives a reboot
-- [ ] Reclaim `D:` slack: `fstrim -av`, then `wsl --manage VisioVox --set-sparse true` (needs the distro stopped)
+- [x] **Create the volume without Administrator** — loop-mounted ext4 image at
+      `/mnt/e/wsl/visiovox-media.img`, 200 G, mounted at `/srv/media`. The elevated vhdx route was
+      not needed after the loop route measured well (see Measurements)
+- [x] Mount **via systemd**, so it lands in PID 1's namespace and Docker can see it
+- [x] Confirm `/srv/media` is a distinct filesystem — `st_dev` 1793 vs root 2096
+- [x] Boot persistence — `srv-media.mount` generated, `WantedBy=local-fs.target`, `Requires=mnt-e.mount`
+- [x] Migrate the existing MinIO bucket (5.3 MB) off the named volume, no data loss
+- [x] Repoint MinIO — verified `bind /srv/media/minio -> /data`, container healthy
+- [x] Fix Compose env loading — `--project-directory .` in the Makefile, so the repo-root `.env` is read
+- [x] Silence WSL's competing `mount -a` — `mountFsTab = false` in `/etc/wsl.conf`
+- [ ] Reclaim `D:` slack: `fstrim -av`, then `wsl --manage VisioVox --set-sparse true` (needs the
+      distro stopped, so scheduled rather than done opportunistically — `D:` is still at 5.6 GB)
+- [ ] Verify the mount returns after a real reboot (the `wsl.conf` change only takes effect then)
 - [x] Disk-headroom check that reads the **media volume**, never `df /` — `apps/api/src/visiovox_api/diskspace.py`
 - [x] Admission cut-out below a configured headroom floor — `can_admit()` in the same module
 - [x] Regression test so the wrong disk check cannot come back — `tests/test_diskspace.py`, 13 tests
@@ -212,6 +248,22 @@ The code half of W0 is done and does not depend on the route decision — it mea
   attach order, which is why `setup-media-volume.sh` writes fstab by **UUID**. `nofail` is equally
   load-bearing: without it, a boot where the vhdx was not attached drops the distro into an
   emergency shell rather than starting without the volume.
-- **`mkfs.ext4 -m 0` is deliberate.** The default 5% root reserve would be ~12 GB of unusable space
-  on a 250 GB media volume. Headroom is managed explicitly by `disk_reserved_bytes`, where it is
+- **`mkfs.ext4 -m 0` is deliberate.** The default 5% root reserve would be ~10 GB of unusable space
+  on a 200 GB media volume. Headroom is managed explicitly by `disk_reserved_bytes`, where it is
   visible and tunable, rather than hidden in the filesystem.
+- **🔥 Every `wsl.exe … bash -c` invocation gets its OWN mount namespace.** A `sudo mount` made that
+  way succeeds, prints nothing wrong, and is **invisible to the next command, to Docker and to the
+  API**. It cost a confusing round of debugging where `df` showed the volume mounted and `stat`
+  insisted it was on `/`. Mount through **systemd** (`systemctl start srv-media.mount`), which runs
+  in PID 1's namespace, and verify with `nsenter -t 1 -m -- …`.
+- **Compose ignores the repo-root `.env` when invoked as `-f infra/docker/compose.yaml`.** The
+  project directory becomes `infra/docker/`, so `MEDIA_MINIO_PATH` was silently unset and MinIO kept
+  writing to the named volume — while every other sign said the cutover had worked. Fixed with
+  `--project-directory .` in the Makefile. Safe because `name: visiovox` is pinned in the compose
+  file, so the project is not renamed and its volumes are not orphaned.
+- **`truncate` on drvfs is not sparse.** A 2 G test file consumed a real 2 G. So the image reserves
+  its full size up front — which is arguably right here, since capacity is committed rather than
+  discovered to be missing halfway through a job.
+- **WSL runs its own `mount -a` before `/mnt/e` exists**, which failed noisily on every single
+  invocation. `mountFsTab = false` in `/etc/wsl.conf` hands `/etc/fstab` to systemd, which orders it
+  correctly behind `mnt-e.mount`. Takes effect at the next distro restart.
