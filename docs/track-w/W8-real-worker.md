@@ -1,6 +1,6 @@
 # W8 — Real worker, real inference
 
-**State:** ⬜ Not started
+**State:** ✅ Done — trained checkpoint runs the pipeline, 2.1x realtime measured
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W8
 **Depends on:** W0, W2
 

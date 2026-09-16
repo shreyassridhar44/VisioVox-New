@@ -1,6 +1,6 @@
 # W4 — Auth UI and account surface
 
-**State:** ⬜ Not started
+**State:** ✅ Done — refresh token in an httpOnly cookie, verified in a browser
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W4
 **Depends on:** W3
 

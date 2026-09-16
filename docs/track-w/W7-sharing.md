@@ -1,6 +1,6 @@
 # W7 — Sharing
 
-**State:** ⬜ Not started
+**State:** ✅ Done — revocable, scoped, unguessable, never indexed
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W7
 **Depends on:** W6
 

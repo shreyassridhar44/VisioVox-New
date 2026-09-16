@@ -1,6 +1,6 @@
 # W9 — Deploy for free, and harden
 
-**State:** ⬜ Not started
+**State:** ✅ Done — stack builds, starts and serves at zero recurring cost
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W9
 **Depends on:** W8
 

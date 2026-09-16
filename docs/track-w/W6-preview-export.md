@@ -1,6 +1,6 @@
 # W6 — Preview, export ladder, download
 
-**State:** ⬜ Not started
+**State:** ✅ Done — ladder never upscales, downloads resume via Range
 **Plan of record:** [`../28-product-delivery-plan.md`](../28-product-delivery-plan.md) §W6
 **Depends on:** W2, W3
 
