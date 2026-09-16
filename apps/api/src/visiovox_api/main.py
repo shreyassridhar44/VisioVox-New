@@ -8,19 +8,28 @@ the actual work in service modules. That keeps the ownership check (invariant
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
-from . import auth_service
+from . import auth_service, problems
 from .config import get_settings
 from .db import dispose_engine
 from .deps import CurrentUser, OwnedProject, SessionDep, SettingsDep
+from .middleware import (
+    CorrelationIdMiddleware,
+    GlobalRateLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from .models import Job, JobStage, Project
+from .ratelimit import RULES, RateLimiter, client_ip, enforce
+from .redis_client import close_redis, get_redis
 from .routes_media import router as media_router
 from .schemas import (
     CreateProjectRequest,
@@ -43,6 +52,7 @@ API_PREFIX = "/v1"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     await dispose_engine()
+    await close_redis()
 
 
 app = FastAPI(
@@ -58,12 +68,34 @@ app = FastAPI(
 )
 
 _settings = get_settings()
+_limiter = RateLimiter(get_redis(_settings), _settings)
+
+# Every error leaves as RFC 9457 Problem Details with a correlation id
+# (docs/11 §1), including the ones FastAPI would otherwise format itself.
+app.add_exception_handler(HTTPException, problems.http_exception_handler)
+app.add_exception_handler(RequestValidationError, problems.validation_exception_handler)
+app.add_exception_handler(Exception, problems.unhandled_exception_handler)
+
+# Starlette wraps later-added middleware AROUND earlier ones, so this list reads
+# inside-out. The resulting order is:
+#   CORS -> security headers -> correlation id -> global limit -> routes
+# Security headers sit outside the limiter so a 429 carries them too, and the
+# correlation id is set before anything that might need to log or render it.
+app.add_middleware(GlobalRateLimitMiddleware, settings=_settings, limiter=_limiter)
+app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(SecurityHeadersMiddleware, settings=_settings)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[_settings.next_public_app_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-Correlation-Id",
+        "RateLimit-Limit",
+        "RateLimit-Remaining",
+        "RateLimit-Reset",
+    ],
 )
 
 health = APIRouter(tags=["health"])
@@ -125,6 +157,17 @@ async def register(
 async def login(
     body: LoginRequest, request: Request, session: SessionDep, settings: SettingsDep
 ) -> TokenResponse:
+    # Keyed on ip+email (docs/11 §10). IP alone lets one address grind through a
+    # password list one account at a time; email alone lets an attacker lock a
+    # known victim out of their own account from anywhere. Both together limit
+    # the pair that actually constitutes a guess.
+    enforce(
+        await _limiter.check(
+            RULES["auth_login"],
+            f"{client_ip(request, settings)}|{body.email.lower()}",
+        ),
+        "Too many sign-in attempts. Wait a few minutes before trying again.",
+    )
     try:
         pair = await auth_service.login(
             session,
@@ -144,8 +187,16 @@ async def login(
 
 @auth.post("/refresh")
 async def refresh(
-    body: RefreshRequest, session: SessionDep, settings: SettingsDep
+    body: RefreshRequest, request: Request, session: SessionDep, settings: SettingsDep
 ) -> TokenResponse:
+    # The token itself is the key: there is no authenticated user yet, and the
+    # token is what a replay attack would hammer. Hashed, because a raw refresh
+    # token must never become a Redis key an operator could read.
+    enforce(
+        await _limiter.check(
+            RULES["auth_refresh"], hashlib.sha256(body.refresh_token.encode()).hexdigest()
+        )
+    )
     try:
         pair = await auth_service.refresh(
             session,

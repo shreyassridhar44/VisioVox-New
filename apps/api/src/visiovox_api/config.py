@@ -50,6 +50,22 @@ class Settings(BaseSettings):
 
     # --- redis / celery ---
     redis_url: str = "redis://localhost:6379/0"
+    # A hung Redis must not hold an API worker open; the limiter treats a
+    # timeout as "unavailable" and falls back.
+    redis_timeout_seconds: float = 2.0
+
+    # --- rate limiting (docs/11 §10) ---
+    rate_limit_enabled: bool = True
+    # Redis down: allow requests rather than take the API down with the cache.
+    # A gap in limiting is recoverable; a hard outage is not, and this matches
+    # how the rest of the codebase treats Redis. Set false where the opposite
+    # trade is wanted.
+    rate_limit_fail_open: bool = True
+    # Behind a tunnel or CDN, request.client.host is the proxy and every user
+    # shares one bucket. Set this to the header the proxy overwrites (e.g.
+    # "cf-connecting-ip"). Leave unset otherwise: a spoofable header is worse
+    # than none, because it hands every caller a fresh identity per request.
+    trusted_client_ip_header: str | None = None
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
