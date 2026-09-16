@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# The production template carries no secrets, only the keys that must be set.
+!.env.production.example
 *.pem
 *.key
 !**/testdata/*.key

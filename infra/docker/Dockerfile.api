@@ -1,0 +1,66 @@
+# API image (docs/28 §W9).
+#
+# Multi-stage so the runtime carries no build toolchain, non-root so a
+# compromised process is not root inside the container, and pinned so a rebuild
+# next month produces the same thing as today.
+#
+# Both stages build at /app, deliberately. A virtualenv is not relocatable: the
+# scripts in bin/ carry a shebang pointing at the interpreter's absolute path,
+# so building at /build and copying to /app yields "no such file or directory"
+# for every entrypoint — an error about the missing interpreter that reads like
+# a missing script.
+FROM python:3.12-slim AS builder
+
+# uv resolves and installs; copying the binary from its own image keeps the
+# version pinned and avoids a curl-into-bash at build time.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+# Dependency layer first: the lockfile changes far less often than the source,
+# so a code-only change reuses this layer instead of re-resolving the world.
+COPY pyproject.toml uv.lock ./
+COPY apps/api/pyproject.toml apps/api/
+COPY services/worker-cpu/pyproject.toml services/worker-cpu/
+COPY services/worker-gpu/pyproject.toml services/worker-gpu/
+COPY packages/py-client/pyproject.toml packages/py-client/
+COPY ml/pyproject.toml ml/
+RUN uv sync --frozen --no-install-project --no-dev --package visiovox-api
+
+COPY apps/api apps/api
+COPY packages/py-client packages/py-client
+COPY alembic.ini ./
+# --no-editable: an editable install records a path into the source tree, which
+# the runtime stage does not carry. The package is copied into site-packages
+# instead, so it imports wherever the venv is.
+RUN uv sync --frozen --no-dev --no-editable --package visiovox-api
+
+
+FROM python:3.12-slim AS runtime
+
+# curl for the healthcheck only; nothing else is added to the attack surface.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --create-home --uid 10001 visiovox
+
+WORKDIR /app
+COPY --from=builder --chown=visiovox:visiovox /app/.venv /app/.venv
+# alembic.ini resolves script_location relative to itself, so the migrations
+# keep their real layout rather than being flattened.
+COPY --from=builder --chown=visiovox:visiovox /app/alembic.ini /app/alembic.ini
+COPY --from=builder --chown=visiovox:visiovox /app/apps/api/migrations /app/apps/api/migrations
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER visiovox
+EXPOSE 8000
+
+# Readiness means the database answers, not merely that the process is up.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://localhost:8000/readyz || exit 1
+
+CMD ["uvicorn", "visiovox_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

@@ -1,0 +1,59 @@
+# GPU worker (docs/28 §W9).
+#
+# Runs on the HOST, not in a container. The NVIDIA container toolkit is not
+# installed on this machine, and CUDA-in-Docker-in-WSL2 is a fragile stack to
+# depend on for the one service that cannot degrade gracefully. The worker also
+# needs the model weights and the media volume, both of which are already on the
+# host.
+#
+# Install:
+#   sudo cp infra/local/visiovox-worker-gpu.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now visiovox-worker-gpu
+
+[Unit]
+Description=VisioVox GPU pipeline worker
+# The media volume holds the scratch tree; starting before it is mounted means
+# every job fails with EACCES until someone notices.
+RequiresMountsFor=/srv/media
+After=network-online.target docker.service srv-media.mount
+Wants=network-online.target
+# A crash loop should back off rather than hammer the GPU and the database.
+# These belong in [Unit]; systemd ignores them under [Service].
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=dmin
+Group=dmin
+WorkingDirectory=/home/dmin/visiovox/VisioVox-New
+EnvironmentFile=/home/dmin/visiovox/VisioVox-New/.env
+Environment=PATH=/home/dmin/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PIPELINE_MODE=real
+
+# Concurrency 1 is not tuning. The machine has one A5000, and a second job
+# halves throughput while pushing VRAM at the 24 GB ceiling - which is how a job
+# dies with a CUDA OOM two thirds of the way through an hour-long recording.
+ExecStart=/home/dmin/.local/bin/uv run celery \
+  -A worker_gpu.tasks:celery_app worker \
+  --loglevel=info --concurrency=1 --queues=gpu
+
+Restart=on-failure
+RestartSec=10
+# A long job must be allowed to finish rather than be killed mid-extraction;
+# acks_late means an interrupted job is retried, but finishing is cheaper.
+TimeoutStopSec=900
+KillSignal=SIGTERM
+
+# Modest hardening. Not a sandbox - the worker legitimately needs the GPU
+# devices, the media volume and the model weights - but it has no business
+# writing anywhere else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/srv/media /home/dmin/visiovox/VisioVox-New
+
+[Install]
+WantedBy=multi-user.target

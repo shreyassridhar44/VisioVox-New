@@ -1,0 +1,137 @@
+# Production stack (docs/28 §W9, §D5).
+#
+# The workstation is the server. Nothing here is rented: Postgres, Redis and
+# MinIO run locally, the GPU worker uses the card already in the machine, and
+# Cloudflare Tunnel makes it reachable over HTTPS without an open port, a static
+# IP, or anything that survives CGNAT.
+#
+#   docker compose -f infra/docker/compose.prod.yaml --project-directory . up -d
+#
+# --project-directory matters: without it Compose takes infra/docker as the
+# project root and silently ignores the repo-root .env.
+name: visiovox-prod
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-visiovox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-visiovox}
+    volumes:
+      - ${MEDIA_ROOT:-/srv/media}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-visiovox}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Never published. Only the compose network reaches the database; the
+    # tunnel exposes the web app and nothing else.
+    expose:
+      - '5432'
+
+  redis:
+    image: redis:7-alpine
+    <<: *restart
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - ${MEDIA_ROOT:-/srv/media}/redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    expose:
+      - '6379'
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    <<: *restart
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
+    volumes:
+      - ${MEDIA_ROOT:-/srv/media}/minio:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    # Not published either. Media reaches browsers through presigned URLs the
+    # API issues, so the object store itself never needs to face the internet
+    # (ADR-0012: no public bucket access, ever).
+    expose:
+      - '9000'
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.api
+    <<: *restart
+    env_file: [.env]
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-visiovox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-visiovox}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      S3_ENDPOINT_URL: http://minio:9000
+      MEDIA_ROOT: /srv/media
+      MEDIA_WORK_DIR: /srv/media/work
+      REQUIRE_DEDICATED_MEDIA_VOLUME: 'true'
+      # Behind the tunnel every request arrives from cloudflared, so without
+      # this the global per-IP limit would lock out all users at once.
+      TRUSTED_CLIENT_IP_HEADER: cf-connecting-ip
+    volumes:
+      - ${MEDIA_ROOT:-/srv/media}:/srv/media
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    expose:
+      - '8000'
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.api
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-visiovox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-visiovox}
+    # Runs once per deploy and exits. Separate from the API so a migration
+    # failure stops the deploy instead of crash-looping a service.
+    command: ['alembic', 'upgrade', 'head']
+    working_dir: /app
+    restart: 'no'
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.web
+      args:
+        # Baked in at build time. See the Dockerfile.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?set PUBLIC_API_URL in .env}
+    <<: *restart
+    depends_on:
+      api: { condition: service_started }
+    expose:
+      - '3000'
+
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    <<: *restart
+    # Outbound only: no inbound port, no static IP, works behind CGNAT, and the
+    # TLS certificate is Cloudflare's problem rather than ours.
+    command: ['tunnel', '--no-autoupdate', 'run', '--token', '${CLOUDFLARE_TUNNEL_TOKEN}']
+    depends_on:
+      web: { condition: service_started }
+    profiles: ['tunnel']
+
+volumes: {}

@@ -43,6 +43,8 @@ export default tseslint.config(
         __dirname: 'readonly',
         module: 'writable',
         console: 'readonly',
+        // Node build configs legitimately use the WHATWG URL global.
+        URL: 'readonly',
       },
     },
   },
