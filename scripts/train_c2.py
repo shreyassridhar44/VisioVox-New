@@ -34,6 +34,7 @@ import random
 import sys
 import time
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 import torch
@@ -43,11 +44,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 from models.conditioning import DropoutConfig
 from models.seave import Seave, SeaveConfig
 from models.visual import VisualFrontend
+from training.librimix_data import Libri2MixDataset, LibriMixConfig, MixItem, to_batch_dict
 from training.losses import LossWeights, si_sdr
+from training.realistic_data import RealisticConfig, RealisticMixDataset
 from training.trainer import TrainConfig, Trainer
 from training.voxceleb_mix import MixConfig, VoxCelebMixDataset
 
 PACKED = Path.home() / "data" / "voxceleb2" / "packed"
+LIBRI = Path.home() / "data" / "Libri2Mix" / "Libri2Mix" / "wav16k" / "min"
+LIBRI_ENROL = Path.home() / "data" / "Libri2Mix" / "enrolment"
 GATE_DB = 1.5  # over the audio-only baseline, on same-gender pairs
 
 
@@ -96,8 +101,109 @@ class EnroledMixDataset:
 def collate(items: list[dict[str, np.ndarray]]) -> dict[str, torch.Tensor]:
     out = {k: torch.from_numpy(np.stack([i[k] for i in items])) for k in items[0]}
     # (batch, frames, H, W) -> (batch, 1, frames, H, W) for the 3D stem.
-    out["mouth"] = out["mouth"].unsqueeze(1)
+    # Absent for LibriMix micro-batches, which have no video at all; the
+    # trainer reads the missing key as "no visual cue" and runs the audio-only
+    # path, which is exactly the behaviour the blend is meant to exercise.
+    if "mouth" in out:
+        out["mouth"] = out["mouth"].unsqueeze(1)
     return out
+
+
+class MixSource(Protocol):
+    """What the LibriMix side of the blend has to provide.
+
+    A protocol rather than a concrete type because the training side is a
+    round-robin over several splits while the dev side is a single one, and
+    both are equally valid sources of a micro-batch.
+    """
+
+    def __len__(self) -> int: ...
+    def sample(self, index: int) -> MixItem: ...
+
+
+class RoundRobinMix:
+    """Several room-simulated splits addressed as one, by index.
+
+    ConcatMixDataset joins splits *inside* the Libri2Mix layer, but the room
+    simulation wraps each split from the outside, so the joining has to happen
+    out here instead -- the same shape train_c3.py uses.
+    """
+
+    def __init__(self, datasets: list[RealisticMixDataset]) -> None:
+        self.datasets = datasets
+        self._len = sum(len(d) for d in datasets)
+
+    def __len__(self) -> int:
+        return self._len
+
+    def sample(self, index: int) -> MixItem:
+        d = self.datasets[index % len(self.datasets)]
+        return d.sample(index // len(self.datasets) % len(d))
+
+
+def build_librimix(split: str, chunk: float, dry: float = 0.15) -> RealisticMixDataset:
+    """Room-simulated LibriMix, exactly as C3 built it.
+
+    Same construction rather than a variation on it: the point of blending this
+    corpus back in is to hold the distribution C3 learned, and a subtly
+    different simulation would defeat that.
+    """
+    base = Libri2MixDataset(
+        LIBRI / split, LIBRI_ENROL / f"{split}.npz", LibriMixConfig(chunk_seconds=chunk, seed=0)
+    )
+    return RealisticMixDataset(base, RealisticConfig(chunk_seconds=chunk, seed=0, dry_fraction=dry))
+
+
+def make_libri_batches(
+    ds: MixSource, indices: list[int], batch_size: int
+) -> list[dict[str, torch.Tensor]]:
+    """Audio-only micro-batches — no `mouth` key, so the visual path stays off.
+
+    Blending happens at micro-batch granularity rather than within a batch.
+    Mixing corpora inside one batch would need ragged collation for the ROI
+    tensor, and there is no benefit to pay for it: gradients are accumulated
+    across the whole step either way, so the optimiser sees both domains in
+    every update regardless of how they are grouped.
+    """
+    out = []
+    for start in range(0, len(indices), batch_size):
+        group = indices[start : start + batch_size]
+        if len(group) < batch_size:
+            break
+        out.append(collate([to_batch_dict(ds.sample(i)) for i in group]))
+    return out
+
+
+@torch.no_grad()
+def validate_product(
+    model: AudioVisualSeave,
+    ds: MixSource,
+    n_items: int,
+    batch_size: int,
+    device: torch.device,
+) -> float:
+    """SI-SDRi on room-simulated LibriMix — the product-domain proxy.
+
+    This column exists because its absence cost two days. C2 v1 and v2 both
+    scored above +9.7 dB on VoxCeleb2 while collapsing to +2.49 and -1.61 dB
+    on the product condition, and nothing in the training log hinted at it:
+    every number on screen was going up. A held-out set from the domain the
+    model is *for* is the only thing that catches a corpus-specific win.
+    """
+    model.eval()
+    scores: list[float] = []
+    rng = np.random.default_rng(0)
+    indices = rng.choice(len(ds), size=min(n_items, len(ds)), replace=False).tolist()
+    for batch in make_libri_batches(ds, indices, batch_size):
+        mixture = batch["mixture"].to(device)
+        target = batch["target"].to(device)
+        emb = batch["speaker_embedding"].to(device)
+        conf = torch.ones(mixture.shape[0], device=device)
+        est = model(mixture, emb, conf, None)["estimate"]
+        scores.extend((si_sdr(est, target) - si_sdr(mixture, target)).cpu().tolist())
+    model.train()
+    finite = [s for s in scores if np.isfinite(s)]
+    return float(np.mean(finite)) if finite else float("nan")
 
 
 def make_batches(
@@ -207,6 +313,12 @@ def main(argv: list[str]) -> int:
         "--tir", type=float, nargs=2, default=(-8.0, 3.0),
         help="target-to-interferer ratio range; wider and lower than the default (-5, 5)",
     )  # fmt: skip
+    # The fix for C2 v2. Training on VoxCeleb2 alone cost +8.25 -> -1.61 dB on
+    # the product condition, monotonically with the number of steps taken; the
+    # corpus has no room simulation, so the model unlearned one. Half the
+    # micro-batches now come from the corpus C3 was trained on.
+    ap.add_argument("--librimix-ratio", type=float, default=0.5)
+    ap.add_argument("--librimix-splits", default="train-100,train-360")
     ap.add_argument("--out", type=Path, default=Path.home() / "runs" / "c2")
     ap.add_argument("--init-from", type=Path, default=Path.home() / "runs" / "c3" / "best.pt")
     ap.add_argument(
@@ -257,6 +369,20 @@ def main(argv: list[str]) -> int:
     print(f"train {len(train_ds):,} items / {len(train_speakers)} speakers")
     print(f"dev   {len(dev_ds):,} items / {len(val_speakers)} speakers (disjoint)")
 
+    libri_train: MixSource | None = None
+    libri_dev: RealisticMixDataset | None = None
+    if args.librimix_ratio > 0:
+        splits = [x.strip() for x in args.librimix_splits.split(",") if x.strip()]
+        missing = [x for x in [*splits, "dev"] if not (LIBRI_ENROL / f"{x}.npz").exists()]
+        if missing:
+            print(f"missing LibriMix enrolment for {missing}")
+            return 2
+        parts = [build_librimix(x, args.chunk_seconds) for x in splits]
+
+        libri_train = RoundRobinMix(parts)
+        libri_dev = build_librimix("dev", args.chunk_seconds)
+        print(f"libri {len(libri_train):,} items from {splits} + dev {len(libri_dev):,}")
+
     model = AudioVisualSeave(SeaveConfig()).to(device)
     trainer = Trainer(
         model.seave,
@@ -294,6 +420,9 @@ def main(argv: list[str]) -> int:
         f"both {1 - args.drop_audio_cue - p_audio_only:.0%}   "
         f"tir={cfg.tir_db}  confusable={args.confusable_prob:.0%}"
     )
+    n_libri = round(args.grad_accum * args.librimix_ratio)
+    n_vox = args.grad_accum - n_libri
+    print(f"corpora per step: {n_vox} VoxCeleb2 micro-batches + {n_libri} room-simulated LibriMix")
 
     args.out.mkdir(parents=True, exist_ok=True)
     best = -np.inf
@@ -350,8 +479,11 @@ def main(argv: list[str]) -> int:
     t0 = time.perf_counter()
     for step in range(start_step, args.steps):
         rng = np.random.default_rng([2, step])
-        picks = rng.integers(0, len(train_ds), size=args.batch * args.grad_accum).tolist()
+        picks = rng.integers(0, len(train_ds), size=args.batch * n_vox).tolist()
         batches = make_batches(train_ds, picks, args.batch)
+        if libri_train is not None and n_libri > 0:
+            lpicks = rng.integers(0, len(libri_train), size=args.batch * n_libri).tolist()
+            batches += make_libri_batches(libri_train, lpicks, args.batch)
         result = trainer.train_step(batches)
 
         if step % 50 == 0:
@@ -369,24 +501,41 @@ def main(argv: list[str]) -> int:
                 model, dev_ds, args.val_items, args.batch, device,
                 with_video=True, with_speaker=False,
             )  # fmt: skip
-            log.append(
-                {"step": float(step), "val_si_sdri": av, "audio_only": ao, "visual_only": vo}
+            product = (
+                validate_product(model, libri_dev, args.val_items, args.batch, device)
+                if libri_dev is not None
+                else float("nan")
             )
+            log.append(
+                {
+                    "step": float(step),
+                    "val_si_sdri": av,
+                    "audio_only": ao,
+                    "visual_only": vo,
+                    "product": product,
+                }
+            )
+            # Selection is on the *weaker* of the two domains, not on VoxCeleb2
+            # alone. C2 v2 was chosen by its VoxCeleb2 score and turned out to
+            # be the worst product-condition model of the four trained; a
+            # max-min criterion cannot pick a checkpoint that has collapsed on
+            # either side, which is exactly the failure to rule out here.
+            score = av if np.isnan(product) else min(av, product)
             marker = ""
-            if av > best:
-                best = av
-                save(args.out / "best.pt", {"val_si_sdri": best})
+            if score > best:
+                best = score
+                save(args.out / "best.pt", {"val_si_sdri": av, "product": product})
                 marker = "  <- best"
             print(
                 f"    AV {av:+.2f} dB   audio-only {ao:+.2f} dB   visual-only {vo:+.2f} dB   "
-                f"visual worth {av - ao:+.2f} dB{marker}",
+                f"visual worth {av - ao:+.2f} dB   product {product:+.2f} dB{marker}",
                 flush=True,
             )
             (args.out / "log.json").write_text(json.dumps(log, indent=2), encoding="utf-8")
             save(args.out / "last.pt", {"val_si_sdri": best})
 
     trainer.write_history(args.out / "history.json")
-    print(f"\n  best audio-visual SI-SDRi {best:+.2f} dB")
+    print(f"\n  best min(VoxCeleb2 AV, product) {best:+.2f} dB")
     return 0
 
 

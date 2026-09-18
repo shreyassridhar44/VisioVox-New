@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Keep C2 v2 alive across the machine going down.
+# Keep a C2 run alive across the machine going down. RUN and STEPS select
+# which one, and must match the launch: a resume that restored different
+# values would continue a different experiment into the same log.
 #
 # This box has lost power four times mid-run. Each time the fix was the same
 # one command and each time the GPU sat idle until somebody noticed; on a
@@ -17,8 +19,10 @@ set -uo pipefail
 
 REPO="$HOME/visiovox/VisioVox-New"
 export PATH="$HOME/.local/bin:$PATH"
-OUT="$HOME/runs/c2-v2"
-LOG="$HOME/logs/c2-v2.log"
+RUN="${RUN:-c2-v3}"
+STEPS="${STEPS:-10000}"
+OUT="$HOME/runs/$RUN"
+LOG="$HOME/logs/$RUN.log"
 POLL=120
 MAX_RESUMES=20
 
@@ -27,11 +31,11 @@ log() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 running() { pgrep -f "[t]rain_c2.py" >/dev/null; }
 
 resumes=0
-log "supervisor started, watching $OUT"
+log "supervisor started, watching $OUT (target $STEPS steps)"
 
 while true; do
   if [ -f "$OUT/history.json" ]; then
-    log "c2-v2 finished; supervisor exiting"
+    log "$RUN finished; supervisor exiting"
     exit 0
   fi
   if running; then
@@ -49,10 +53,10 @@ while true; do
     exit 1
   fi
 
-  log "c2-v2 stopped early (resume $resumes/$MAX_RESUMES); restarting"
+  log "$RUN stopped early (resume $resumes/$MAX_RESUMES); restarting"
   cd "$REPO" || exit 1
   setsid nohup uv run python scripts/train_c2.py \
-    --steps 12000 --val-every 500 \
+    --steps "$STEPS" --val-every 500 \
     --out "$OUT" \
     --drop-audio-cue 0.5 --drop-visual 0.40 \
     --confusable-prob 0.5 --tir -8.0 3.0 \
