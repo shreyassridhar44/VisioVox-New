@@ -87,7 +87,19 @@ class Settings(BaseSettings):
     extractor_version: str = "seave-0.1.0"
     # The trained SEAVE checkpoint the GPU worker loads. Pinned by path rather
     # than discovered, so a job records which weights produced it.
-    extractor_checkpoint: str = "~/runs/c2-v2/best.pt"
+    #
+    # NOT c2-v2, despite it being the newest and scoring +11.43 dB on
+    # VoxCeleb2. Measured on the product condition -- real speech, simulated
+    # room, verified overlap -- c2-v2 scores -1.61 dB at two speakers: it makes
+    # user audio worse than leaving it alone. c3 is the only checkpoint that
+    # holds up there (+8.25 / +6.34 dB at two and three speakers), because it
+    # is the only one trained with room simulation and not subsequently
+    # fine-tuned away from it. See scripts/eval_overlap.py.
+    #
+    # c2-v3 is training now with both corpora blended; move this on to it only
+    # once eval_overlap.py says it beats c3 on the product condition, not on
+    # the strength of a VoxCeleb2 number.
+    extractor_checkpoint: str = "~/runs/c3/best.pt"
     # "cuda" on the workstation, "cpu" anywhere else. Stage code falls back on
     # its own if CUDA is absent, but being explicit keeps CI honest.
     torch_device: str = "cuda"
